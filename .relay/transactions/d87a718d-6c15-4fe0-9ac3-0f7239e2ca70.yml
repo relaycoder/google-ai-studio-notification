@@ -1,0 +1,545 @@
+uuid: d87a718d-6c15-4fe0-9ac3-0f7239e2ca70
+projectId: google-ai-studio-notification
+createdAt: '2025-08-03T09:32:01.775Z'
+linesAdded: 190
+linesRemoved: 67
+gitCommitMsg: 'refactor: add typescript, eslint, and prettier tooling'
+promptSummary: User requested a professional development setup with TypeScript and linting.
+reasoning:
+  - >-
+    Excellent suggestion. Adding a proper development setup with TypeScript for
+    type safety and ESLint/Prettier for code quality and consistency is a
+    hallmark of professional development. This will make the extension much
+    easier to maintain and extend in the future.
+  - I will now refactor the project to include these tools.
+  - '### Step 1: Create `package.json`'
+  - >-
+    This file defines the project's dependencies and scripts for building,
+    linting, and formatting. We'll need `typescript`, `eslint`, `prettier`, and
+    type definitions for the Chrome APIs.
+  - '### Step 2: Create `tsconfig.json`'
+  - >-
+    This configures the TypeScript compiler (`tsc`). We'll compile our source
+    files from `src` into a `dist` directory, which will contain the final,
+    runnable extension.
+  - '### Step 3: Create Linter and Formatter Configs'
+  - >-
+    `.eslintrc.cjs` configures ESLint for finding potential errors and enforcing
+    code style. `.prettierrc.json` ensures consistent code formatting.
+  - '### Step 4: Reorganize and Convert Files'
+  - >-
+    I'll move all source code to a `src` directory and all static assets to a
+    `public` directory. The JavaScript files will be converted to TypeScript
+    (`.ts`).
+  - >-
+    First, move `content.js` to `src/content.ts` and `background.js` to
+    `src/background.ts`.
+  - >-
+    Now, I'll create the `public` directory and move the assets. Note that I'm
+    deleting the old root-level files.
+  - '### Step 5: Update Source Files with Types'
+  - >-
+    Now I'll add TypeScript types to our source files for better safety and
+    auto-completion.
+  - '### Step 6: Update and Move `manifest.json`'
+  - >-
+    The manifest now needs to live in `src` so the build script can copy it. It
+    must point to the new asset paths and the compiled JS files.
+  - '### Step 7: Update `README.md`'
+  - >-
+    Finally, a complete overhaul of the `README.md` to explain the new,
+    professional workflow.
+  - bash
+  - npm run build
+  - '```'
+  - 'This command will:'
+  - >-
+    1.  Compile the TypeScript files from `src/` into JavaScript in the `dist/`
+    directory.
+  - >-
+    2.  Copy `src/manifest.json` and all assets from `public/` into the `dist/`
+    directory.
+  - The `dist/` folder now contains the complete, loadable Chrome extension.
+  - '## Installation'
+  - 1.  **Build the extension** by running `npm run build`.
+  - 2.  Open Google Chrome and navigate to `chrome://extensions`.
+  - 3.  Enable **"Developer mode"** with the toggle in the top-right corner.
+  - 4.  Click the **"Load unpacked"** button.
+  - 5.  **Select the `dist` directory** that was created by the build command.
+  - >-
+    6.  The extension is now installed. You may need to accept the "Show
+    notifications" permission.
+  - '### Custom Assets'
+  - >-
+    -   To change the notification sound, replace `public/notification.mp3` with
+    your own `.mp3` file.
+  - '-   To change the icons, replace the `.png` files in `public/`.'
+  - >-
+    -   **Remember to run `npm run build` again** after changing any files in
+    `public/` or `src/`.
+  - '## How It Works'
+  - 'The extension uses two main components:'
+  - >-
+    1.  **Content Script (`src/content.ts`):** Injected into the AI Studio page,
+    it watches for the "running" indicator to disappear. It then plays a sound
+    and messages the background script.
+  - >-
+    2.  **Background Service Worker (`src/background.ts`):** Listens for
+    messages and uses the `chrome.notifications` API to display a desktop
+    notification.
+  - '## Debugging / Viewing Logs'
+  - 1.  Go to the Google AI Studio tab.
+  - 2.  Open the Developer Tools (`F12` or `Ctrl+Shift+I`).
+  - 3.  Click on the **"Console"** tab to see logs from `content.ts`.
+  - >-
+    4.  To see logs from the background service worker, go to
+    `chrome://extensions`, find the "AI Studio Notifier" card, and click the
+    "Service Worker" link. This will open a dedicated console for
+    `background.ts`.
+  - '```'
+  - >-
+    Your project is now set up like a professional front-end application! You
+    can now benefit from type-checking, auto-formatting, and a clean, organized
+    file structure.
+operations:
+  - type: write
+    path: package.json
+    content: |-
+      {
+        "name": "ai-studio-notifier",
+        "version": "1.2.0",
+        "description": "Plays a sound and shows a notification when a process in Google AI Studio finishes.",
+        "private": true,
+        "scripts": {
+          "build": "tsc && npm run copy-assets",
+          "copy-assets": "cp src/manifest.json dist/ && cp -r public/. dist/assets",
+          "lint": "eslint \"src/**/*.ts\"",
+          "format": "prettier --write \"src/**/*.{ts,json}\""
+        },
+        "devDependencies": {
+          "@types/chrome": "^0.0.251",
+          "@typescript-eslint/eslint-plugin": "^6.13.1",
+          "@typescript-eslint/parser": "^6.13.1",
+          "eslint": "^8.55.0",
+          "eslint-config-prettier": "^9.1.0",
+          "eslint-plugin-prettier": "^5.0.1",
+          "prettier": "^3.1.0",
+          "typescript": "^5.3.2"
+        }
+      }
+    patchStrategy: replace
+  - type: write
+    path: tsconfig.json
+    content: |-
+      {
+        "compilerOptions": {
+          "target": "es2020",
+          "module": "es2020",
+          "strict": true,
+          "outDir": "./dist",
+          "rootDir": "./src",
+          "esModuleInterop": true,
+          "forceConsistentCasingInFileNames": true,
+          "typeRoots": [
+            "./node_modules/@types"
+          ]
+        },
+        "include": [
+          "src/**/*.ts"
+        ],
+        "exclude": [
+          "node_modules"
+        ]
+      }
+    patchStrategy: replace
+  - type: write
+    path: .eslintrc.cjs
+    content: |-
+      module.exports = {
+        parser: '@typescript-eslint/parser',
+        extends: [
+          'eslint:recommended',
+          'plugin:@typescript-eslint/recommended',
+          'plugin:prettier/recommended',
+        ],
+        parserOptions: {
+          ecmaVersion: 2020,
+          sourceType: 'module',
+        },
+        env: {
+          browser: true,
+          es6: true,
+        },
+        rules: {
+          // Add any custom rules here
+        },
+      };
+    patchStrategy: replace
+  - type: write
+    path: .prettierrc.json
+    content: |-
+      {
+        "semi": true,
+        "singleQuote": true,
+        "trailingComma": "es5",
+        "printWidth": 80
+      }
+    patchStrategy: replace
+  - type: rename
+    from: content.js
+    to: src/content.ts
+  - type: rename
+    from: background.js
+    to: src/background.ts
+  - type: rename
+    from: icon48.png
+    to: public/icon48.png
+  - type: rename
+    from: icon128.png
+    to: public/icon128.png
+  - type: rename
+    from: notification.mp3
+    to: public/notification.mp3
+  - type: write
+    path: src/content.ts
+    content: >-
+      --- src/content.ts
+
+      +++ src/content.ts
+
+      @@ -2,7 +2,7 @@
+       
+       function init() {
+           console.log("AI Studio Notifier initializing...");
+      -
+           // --- Sound Setup ---
+           // Note: You must add a 'notification.mp3' file to the extension's root directory.
+      -    const soundUrl = chrome.runtime.getURL('notification.mp3');
+
+      +    const soundUrl = chrome.runtime.getURL('assets/notification.mp3');
+           const audio = new Audio(soundUrl);
+       
+           function playSound() {
+      @@ -14,7 +14,7 @@
+               // The user identified an element with class "stoppable-stop" as the indicator.
+               // This selector looks for a <rect> element whose class list contains "stoppable-stop".
+               // Using [class*="..."] makes it robust against other dynamic classes added by the framework.
+      -        return document.querySelector('rect[class*="stoppable-stop"]');
+
+      +        return
+      document.querySelector<SVGRectElement>('rect[class*="stoppable-stop"]');
+           }
+           
+           function checkState() {
+    patchStrategy: new-unified
+  - type: write
+    path: src/background.ts
+    content: |-
+      // Listen for messages from the content script
+      chrome.runtime.onMessage.addListener((message: { type: string }) => {
+        if (message.type === 'processFinished') {
+          console.log('Background script received processFinished message.');
+
+          // Create a desktop notification
+          chrome.notifications.create({
+            type: 'basic',
+            iconUrl: 'assets/icon128.png', // An icon is required for basic notifications
+            title: 'AI Studio',
+            message: 'Your process has finished!',
+            priority: 2, // High priority
+          });
+        }
+      });
+    patchStrategy: replace
+  - type: delete
+    path: manifest.json
+  - type: write
+    path: src/manifest.json
+    content: |-
+      {
+        "manifest_version": 3,
+        "name": "AI Studio Notifier",
+        "version": "1.2.0",
+        "description": "Plays a sound and shows a notification when a process in Google AI Studio finishes.",
+        "permissions": [
+          "notifications"
+        ],
+        "host_permissions": [
+          "https://aistudio.google.com/*"
+        ],
+        "background": {
+          "service_worker": "background.js"
+        },
+        "content_scripts": [
+          {
+            "matches": ["https://aistudio.google.com/*"],
+            "js": ["content.js"]
+          }
+        ],
+        "web_accessible_resources": [
+          {
+            "resources": ["assets/*"],
+            "matches": ["https://aistudio.google.com/*"]
+          }
+        ],
+        "icons": {
+          "48": "assets/icon48.png",
+          "128": "assets/icon128.png"
+        }
+      }
+    patchStrategy: replace
+  - type: write
+    path: README.md
+    content: >-
+      # AI Studio Notifier
+
+
+      This Chrome extension plays a sound and shows a desktop notification when
+      a process in Google AI Studio finishes.
+
+
+      This project is set up with TypeScript, ESLint, and Prettier for a modern,
+      robust development experience.
+
+
+      ## Development Setup
+
+
+      1.  **Install Node.js:** If you don't have it, install Node.js (which
+      includes npm).
+
+      2.  **Clone the repository:** `git clone <repository-url>`
+
+      3.  **Navigate to the directory:** `cd ai-studio-notifier`
+
+      4.  **Install dependencies:**
+          ```bash
+          npm install
+          ```
+
+      ## Building the Extension
+
+
+      To build the extension from the TypeScript source code, run the build
+      script:
+    patchStrategy: replace
+snapshot:
+  package.json: null
+  tsconfig.json: null
+  .eslintrc.cjs: null
+  .prettierrc.json: null
+  src/content.ts: null
+  src/background.ts: null
+  public/icon48.png: null
+  public/icon128.png: null
+  public/notification.mp3: null
+  src/manifest.json: null
+  content.js: |-
+    let isRunning = false;
+
+    function init() {
+        console.log("AI Studio Notifier initializing...");
+
+        // --- Sound Setup ---
+        // Note: You must add a 'notification.mp3' file to the extension's root directory.
+        const soundUrl = chrome.runtime.getURL('notification.mp3');
+        const audio = new Audio(soundUrl);
+
+        function playSound() {
+            audio.play().catch(error => console.error('Audio play failed. Make sure notification.mp3 exists and is valid.', error));
+        }
+
+        // --- State Checking Logic ---
+        function checkForStopButton() {
+            // The user identified an element with class "stoppable-stop" as the indicator.
+            // This selector looks for a <rect> element whose class list contains "stoppable-stop".
+            // Using [class*="..."] makes it robust against other dynamic classes added by the framework.
+            return document.querySelector('rect[class*="stoppable-stop"]');
+        }
+        
+        function checkState() {
+            const stopButtonExists = !!checkForStopButton();
+
+            if (isRunning && !stopButtonExists) {
+                // This is the transition we're looking for:
+                // State 1 (running, button exists) to State 2 (stopped, button absent).
+                console.log('AI Studio process finished. Playing sound and sending desktop notification.');
+                playSound();
+                // Send a message to the background script to show a desktop notification
+                chrome.runtime.sendMessage({ type: 'processFinished' });
+            }
+
+            // Update the current state for the next check.
+            if (isRunning !== stopButtonExists) {
+                console.log(`AI Studio Notifier: State changed to ${stopButtonExists ? 'Running' : 'Stopped'}`);
+                isRunning = stopButtonExists;
+            }
+        }
+        
+        // --- Observer Setup ---
+        const observer = new MutationObserver(() => {
+            // A DOM change occurred, let's re-evaluate the state.
+            checkState();
+        });
+
+        // We start observing the entire body for changes in its descendants.
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+        console.log("AI Studio Notifier: MutationObserver is now watching the page for changes.");
+
+        // --- Initial Check ---
+        // A short delay helps ensure the page's dynamic content has loaded.
+        setTimeout(checkState, 2000);
+    }
+
+    // The script might be injected before the body is fully available.
+    if (document.body) {
+        init();
+    } else {
+        // If not, wait for it.
+        window.addEventListener('DOMContentLoaded', init);
+    }
+  background.js: |-
+    // Listen for messages from the content script
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message.type === 'processFinished') {
+        console.log('Background script received processFinished message.');
+
+        // Create a desktop notification
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: 'icon128.png', // An icon is required for basic notifications
+          title: 'AI Studio',
+          message: 'Your process has finished!',
+          priority: 2 // High priority
+        });
+      }
+    });
+  icon128.png: |-
+    // This is a placeholder for a 128x128 PNG icon.
+    // Please replace this file with a real image.
+  icon48.png: |-
+    // This is a placeholder for a 48x48 PNG icon.
+    // Please replace this file with a real image.
+  manifest.json: |-
+    {
+      "manifest_version": 3,
+      "name": "AI Studio Notifier",
+      "version": "1.1",
+      "description": "Plays a sound and shows a notification when a process in Google AI Studio finishes.",
+      "permissions": [
+        "notifications"
+      ],
+      "host_permissions": [
+        "https://aistudio.google.com/*"
+      ],
+      "background": {
+        "service_worker": "background.js"
+      },
+      "content_scripts": [
+        {
+          "matches": ["https://aistudio.google.com/*"],
+          "js": ["content.js"]
+        }
+      ],
+      "web_accessible_resources": [
+        {
+          "resources": ["notification.mp3", "icon128.png"],
+          "matches": ["https://aistudio.google.com/*"]
+        }
+      ],
+      "icons": {
+        "48": "icon48.png",
+        "128": "icon128.png"
+      }
+    }
+  README.md: >
+    # AI Studio Notifier
+
+
+    This Chrome extension plays a sound and shows a desktop notification when a
+    process in Google AI Studio finishes. This allows you to get alerts even
+    when you are working in a different browser tab.
+
+
+    ## Installation
+
+
+    1.  Download all the extension files (`manifest.json`, `content.js`,
+    `background.js`, etc.) into a single directory.
+
+    2.  **Provide your own assets:**
+        *   **Sound:** You must replace the placeholder `notification.mp3` file with a valid `.mp3` sound file.
+        *   **Icons (Optional but Recommended):** You can replace `icon48.png` and `icon128.png` with your own icons for a personalized look.
+    3.  Open Google Chrome and navigate to the extensions page:
+    `chrome://extensions`.
+
+    4.  Enable "Developer mode" using the toggle switch in the top-right corner.
+
+    5.  Click the "Load unpacked" button.
+
+    6.  Select the directory containing all the extension files.
+
+    7.  The extension should now be installed. When you reload it, Chrome may
+    ask you to accept the new "Show notifications" permission. Please accept it.
+
+
+    ## How It Works
+
+
+    The extension uses two main components:
+
+
+    1.  **Content Script (`content.js`):** This script is injected into the AI
+    Studio page. It uses a `MutationObserver` to watch for the disappearance of
+    the "running" indicator (`<rect class="...stoppable-stop...">`). When this
+    happens, it plays the `notification.mp3` sound and sends a message to the
+    background script.
+
+
+    2.  **Background Service Worker (`background.js`):** This script runs in the
+    background. It listens for the message from the content script. When it
+    receives the "processFinished" message, it uses the `chrome.notifications`
+    API to display a desktop notification, alerting you even if you're on
+    another tab.
+
+
+    ### State Logic
+
+
+    -   **State 1 (Running):** The `stoppable-stop` element exists.
+
+    -   **State 2 (Stopped):** The `stoppable-stop` element is removed.
+
+    -   **Notification:** On the transition from State 1 to 2, the extension
+    triggers both a sound and a desktop notification.
+
+
+    ## Debugging / Viewing Logs
+
+
+    The extension is designed to print helpful messages to the browser's
+    developer console. If something isn't working, or if you just want to see it
+    in action, follow these steps:
+
+
+    1.  Go to the Google AI Studio tab in your browser.
+
+    2.  Open the Developer Tools. You can do this by:
+        *   Pressing the `F12` key.
+        *   Right-clicking anywhere on the page and selecting "Inspect".
+        *   Using the shortcut `Ctrl+Shift+I` (on Windows/Linux) or `Cmd+Option+I` (on Mac).
+    3.  In the Developer Tools window that appears, click on the **"Console"**
+    tab.
+
+
+    You should see messages from the extension, starting with "AI Studio
+    Notifier initializing...". When a process starts or stops, new messages will
+    appear here. If the sound fails to play, an error message will also be shown
+    in this console.
+  notification.mp3: |-
+    // This is a placeholder file.
+    // Please replace this with a valid .mp3 file named "notification.mp3".
+approved: true

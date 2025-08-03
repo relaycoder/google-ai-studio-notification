@@ -1,0 +1,217 @@
+uuid: 442b15e9-d758-4503-ac8b-4b2a953e5e1e
+projectId: google-ai-studio-notification
+createdAt: '2025-08-03T09:28:09.077Z'
+linesAdded: 13
+linesRemoved: 1
+gitCommitMsg: 'docs: clarify how to view console logs'
+promptSummary: >-
+  User asked for clarification on where to view the console logs from the
+  content script.
+reasoning:
+  - >-
+    Of course. It's not always obvious where to find `console.log` messages from
+    a content script. They appear in the developer console of the page the
+    script is injected into, not in a separate extension console.
+  - >-
+    I will update the `README.md` with detailed instructions and add another log
+    message to `content.js` to make it clearer that the script is actively
+    watching the page.
+  - '### Step 1: Update `content.js`'
+  - >-
+    I'm adding a log message to confirm that the `MutationObserver` has been
+    successfully attached and is watching for changes. This gives you immediate
+    feedback in the console that the extension's core logic is running.
+  - '### Step 2: Update `README.md`'
+  - >-
+    I'll replace the brief note at the end of the `README.md` with a much more
+    detailed "Debugging" section. This will explicitly guide you on how to open
+    the developer tools and find the console output.
+  - >-
+    Now, when you go to an AI Studio tab and open the developer console, you'll
+    see explicit confirmation that the script is running and will be able to
+    follow the state changes as they happen.
+operations:
+  - type: write
+    path: content.js
+    content: |-
+      <<<<<<< SEARCH
+          // We start observing the entire body for changes in its descendants.
+          observer.observe(document.body, {
+              childList: true,
+              subtree: true
+          });
+
+          // --- Initial Check ---
+      =======
+          // We start observing the entire body for changes in its descendants.
+          observer.observe(document.body, {
+              childList: true,
+              subtree: true
+          });
+          console.log("AI Studio Notifier: MutationObserver is now watching the page for changes.");
+
+          // --- Initial Check ---
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+  - type: write
+    path: README.md
+    content: >-
+      <<<<<<< SEARCH
+
+      You can open the developer console (F12) on an AI Studio page to see log
+      messages from the extension.
+
+      =======
+
+      ## Debugging / Viewing Logs
+
+
+      The extension is designed to print helpful messages to the browser's
+      developer console. If something isn't working, or if you just want to see
+      it in action, follow these steps:
+
+
+      1.  Go to the Google AI Studio tab in your browser.
+
+      2.  Open the Developer Tools. You can do this by:
+          *   Pressing the `F12` key.
+          *   Right-clicking anywhere on the page and selecting "Inspect".
+          *   Using the shortcut `Ctrl+Shift+I` (on Windows/Linux) or `Cmd+Option+I` (on Mac).
+      3.  In the Developer Tools window that appears, click on the **"Console"**
+      tab.
+
+
+      You should see messages from the extension, starting with "AI Studio
+      Notifier initializing...". When a process starts or stops, new messages
+      will appear here. If the sound fails to play, an error message will also
+      be shown in this console.
+
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+snapshot:
+  content.js: |-
+    let isRunning = false;
+
+    function init() {
+        console.log("AI Studio Notifier initializing...");
+
+        // --- Sound Setup ---
+        // Note: You must add a 'notification.mp3' file to the extension's root directory.
+        const soundUrl = chrome.runtime.getURL('notification.mp3');
+        const audio = new Audio(soundUrl);
+
+        function playSound() {
+            audio.play().catch(error => console.error('Audio play failed. Make sure notification.mp3 exists and is valid.', error));
+        }
+
+        // --- State Checking Logic ---
+        function checkForStopButton() {
+            // The user identified an element with class "stoppable-stop" as the indicator.
+            // This selector looks for a <rect> element whose class list contains "stoppable-stop".
+            // Using [class*="..."] makes it robust against other dynamic classes added by the framework.
+            return document.querySelector('rect[class*="stoppable-stop"]');
+        }
+        
+        function checkState() {
+            const stopButtonExists = !!checkForStopButton();
+
+            if (isRunning && !stopButtonExists) {
+                // This is the transition we're looking for:
+                // State 1 (running, button exists) to State 2 (stopped, button absent).
+                console.log('AI Studio process finished. Playing notification.');
+                playSound();
+            }
+
+            // Update the current state for the next check.
+            if (isRunning !== stopButtonExists) {
+                console.log(`AI Studio Notifier: State changed to ${stopButtonExists ? 'Running' : 'Stopped'}`);
+                isRunning = stopButtonExists;
+            }
+        }
+        
+        // --- Observer Setup ---
+        const observer = new MutationObserver(() => {
+            // A DOM change occurred, let's re-evaluate the state.
+            checkState();
+        });
+
+        // We start observing the entire body for changes in its descendants.
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        // --- Initial Check ---
+        // A short delay helps ensure the page's dynamic content has loaded.
+        setTimeout(checkState, 2000);
+    }
+
+    // The script might be injected before the body is fully available.
+    if (document.body) {
+        init();
+    } else {
+        // If not, wait for it.
+        window.addEventListener('DOMContentLoaded', init);
+    }
+  README.md: >
+    # AI Studio Notifier
+
+
+    This Chrome extension plays a sound when a process in Google AI Studio
+    finishes.
+
+
+    ## Installation
+
+
+    1.  Download all the extension files (`manifest.json`, `content.js`, etc.)
+    into a single directory.
+
+    2.  **You must provide your own `notification.mp3` sound file.** Place a
+    valid `.mp3` file named `notification.mp3` in the root of the directory you
+    just created. You can find many free notification sounds online.
+
+    3.  Open Google Chrome and navigate to the extensions page:
+    `chrome://extensions`.
+
+    4.  Enable "Developer mode" using the toggle switch in the top-right corner.
+
+    5.  Click the "Load unpacked" button.
+
+    6.  Select the directory containing the `manifest.json`, `content.js`, and
+    your `notification.mp3` file.
+
+    7.  The extension should now be installed and active.
+
+
+    ## How It Works
+
+
+    The extension injects a content script into any tab whose URL matches
+    `https://aistudio.google.com/*`.
+
+
+    This script uses a `MutationObserver` to efficiently monitor the page's
+    structure for changes. It specifically looks for an element that indicates a
+    process is running. Based on your request, this is the element:
+
+
+    -   `<rect class="...stoppable-stop...">`
+
+
+    ### State Logic
+
+
+    -   **State 1 (Running):** The `stoppable-stop` element exists on the page.
+    The script notes this state.
+
+    -   **State 2 (Stopped):** The `stoppable-stop` element is removed from the
+    page.
+
+    -   **Notification:** When the script detects a change from State 1 to State
+    2, it plays the `notification.mp3` sound.
+
+
+    You can open the developer console (F12) on an AI Studio page to see log
+    messages from the extension.
+approved: true

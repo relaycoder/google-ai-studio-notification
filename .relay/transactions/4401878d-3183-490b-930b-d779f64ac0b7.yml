@@ -1,0 +1,211 @@
+uuid: 4401878d-3183-490b-930b-d779f64ac0b7
+projectId: google-ai-studio-notification
+createdAt: '2025-08-03T09:38:36.170Z'
+linesAdded: 66
+linesRemoved: 49
+gitCommitMsg: 'style: format typescript files to fix linting errors'
+promptSummary: Fix ESLint and Prettier errors reported in the terminal output.
+reasoning:
+  - >-
+    I will fix the ESLint errors by reformatting the TypeScript files according
+    to the project's Prettier configuration. The errors are primarily related to
+    code style, such as indentation, quote style, and line length.
+  - >-
+    First, I'll address the single formatting error in `src/background.ts`. The
+    linter reported a missing newline at the end of the file. I will reformat
+    the file, which primarily involves adding that newline.
+  - >-
+    Second, I'll fix the numerous formatting issues in `src/content.ts`. I will
+    replace the entire file with a version that is correctly formatted according
+    to the Prettier rules: using single quotes, 2-space indentation, wrapping
+    long lines, and adding trailing commas.
+operations:
+  - type: write
+    path: src/background.ts
+    content: |-
+      // Listen for messages from the content script
+      chrome.runtime.onMessage.addListener((message: { type: string }) => {
+        if (message.type === 'processFinished') {
+          console.log('Background script received processFinished message.');
+
+          // Create a desktop notification
+          chrome.notifications.create({
+            type: 'basic',
+            iconUrl: 'assets/icon128.png', // An icon is required for basic notifications
+            title: 'AI Studio',
+            message: 'Your process has finished!',
+            priority: 2, // High priority
+          });
+        }
+      });
+    patchStrategy: replace
+  - type: write
+    path: src/content.ts
+    content: |-
+      let isRunning = false;
+
+      function init() {
+        console.log('AI Studio Notifier initializing...');
+        // --- Sound Setup ---
+        // Note: You must add a 'notification.mp3' file to the extension's root directory.
+        const soundUrl = chrome.runtime.getURL('assets/notification.mp3');
+        const audio = new Audio(soundUrl);
+
+        function playSound() {
+          audio
+            .play()
+            .catch((error) =>
+              console.error(
+                'Audio play failed. Make sure notification.mp3 exists and is valid.',
+                error
+              )
+            );
+        }
+
+        // --- State Checking Logic ---
+        function checkForStopButton() {
+          // The user identified an element with class "stoppable-stop" as the indicator.
+          // This selector looks for a <rect> element whose class list contains "stoppable-stop".
+          // Using [class*="..."] makes it robust against other dynamic classes added by the framework.
+          return document.querySelector<SVGRectElement>(
+            'rect[class*="stoppable-stop"]'
+          );
+        }
+
+        function checkState() {
+          const stopButtonExists = !!checkForStopButton();
+
+          if (isRunning && !stopButtonExists) {
+            // This is the transition we're looking for:
+            // State 1 (running, button exists) to State 2 (stopped, button absent).
+            console.log(
+              'AI Studio process finished. Playing sound and sending desktop notification.'
+            );
+            playSound();
+            // Send a message to the background script to show a desktop notification
+            chrome.runtime.sendMessage({ type: 'processFinished' });
+          }
+
+          // Update the current state for the next check.
+          if (isRunning !== stopButtonExists) {
+            console.log(
+              `AI Studio Notifier: State changed to ${
+                stopButtonExists ? 'Running' : 'Stopped'
+              }`
+            );
+            isRunning = stopButtonExists;
+          }
+        }
+
+        // --- Observer Setup ---
+        const observer = new MutationObserver(() => {
+          // A DOM change occurred, let's re-evaluate the state.
+          checkState();
+        });
+
+        // We start observing the entire body for changes in its descendants.
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true,
+        });
+        console.log(
+          'AI Studio Notifier: MutationObserver is now watching the page for changes.'
+        );
+
+        // --- Initial Check ---
+        // A short delay helps ensure the page's dynamic content has loaded.
+        setTimeout(checkState, 2000);
+      }
+
+      // The script might be injected before the body is fully available.
+      if (document.body) {
+        init();
+      } else {
+        // If not, wait for it.
+        window.addEventListener('DOMContentLoaded', init);
+      }
+    patchStrategy: replace
+snapshot:
+  src/content.ts: |-
+    let isRunning = false;
+
+    function init() {
+        console.log("AI Studio Notifier initializing...");
+        // --- Sound Setup ---
+        // Note: You must add a 'notification.mp3' file to the extension's root directory.
+        const soundUrl = chrome.runtime.getURL('assets/notification.mp3');
+        const audio = new Audio(soundUrl);
+
+        function playSound() {
+            audio.play().catch(error => console.error('Audio play failed. Make sure notification.mp3 exists and is valid.', error));
+        }
+
+        // --- State Checking Logic ---
+        function checkForStopButton() {
+            // The user identified an element with class "stoppable-stop" as the indicator.
+            // This selector looks for a <rect> element whose class list contains "stoppable-stop".
+            // Using [class*="..."] makes it robust against other dynamic classes added by the framework.
+            return document.querySelector<SVGRectElement>('rect[class*="stoppable-stop"]');
+        }
+        
+        function checkState() {
+            const stopButtonExists = !!checkForStopButton();
+
+            if (isRunning && !stopButtonExists) {
+                // This is the transition we're looking for:
+                // State 1 (running, button exists) to State 2 (stopped, button absent).
+                console.log('AI Studio process finished. Playing sound and sending desktop notification.');
+                playSound();
+                // Send a message to the background script to show a desktop notification
+                chrome.runtime.sendMessage({ type: 'processFinished' });
+            }
+
+            // Update the current state for the next check.
+            if (isRunning !== stopButtonExists) {
+                console.log(`AI Studio Notifier: State changed to ${stopButtonExists ? 'Running' : 'Stopped'}`);
+                isRunning = stopButtonExists;
+            }
+        }
+        
+        // --- Observer Setup ---
+        const observer = new MutationObserver(() => {
+            // A DOM change occurred, let's re-evaluate the state.
+            checkState();
+        });
+
+        // We start observing the entire body for changes in its descendants.
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+        console.log("AI Studio Notifier: MutationObserver is now watching the page for changes.");
+
+        // --- Initial Check ---
+        // A short delay helps ensure the page's dynamic content has loaded.
+        setTimeout(checkState, 2000);
+    }
+
+    // The script might be injected before the body is fully available.
+    if (document.body) {
+        init();
+    } else {
+        // If not, wait for it.
+        window.addEventListener('DOMContentLoaded', init);
+    }
+  src/background.ts: |-
+    // Listen for messages from the content script
+    chrome.runtime.onMessage.addListener((message: { type: string }) => {
+      if (message.type === 'processFinished') {
+        console.log('Background script received processFinished message.');
+
+        // Create a desktop notification
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: 'assets/icon128.png', // An icon is required for basic notifications
+          title: 'AI Studio',
+          message: 'Your process has finished!',
+          priority: 2, // High priority
+        });
+      }
+    });
+approved: true
