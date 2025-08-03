@@ -4,7 +4,10 @@
   "version": "1.2.0",
   "description": "Plays a sound and shows a notification when a process in Google AI Studio finishes.",
   "permissions": [
-    "notifications"
+    "notifications",
+    "tabs",
+    "alarms",
+    "storage"
   ],
   "host_permissions": [
     "https://aistudio.google.com/*"
