@@ -5,4 +5,5 @@ export interface IndicatorProps {
   error: string | null;
   elapsedTime: number;
   onPauseResume: () => void;
+  runName: string | null;
 }

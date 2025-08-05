@@ -58,27 +58,6 @@ export const statusConfig: Record<
 };
 ```
 
-## File: src/content/types.ts
-```typescript
-export type Status = 'monitoring' | 'running' | 'stopped' | 'error' | 'paused';
-
-export interface IndicatorProps {
-  status: Status;
-  error: string | null;
-  elapsedTime: number;
-  onPauseResume: () => void;
-}
-```
-
-## File: src/types.ts
-```typescript
-export interface NotificationContext {
-  tabId: number;
-  windowId: number;
-  durationMs?: number | null;
-}
-```
-
 ## File: src/content/index.tsx
 ```typescript
 import React from 'react';
@@ -107,9 +86,23 @@ root.render(
 @tailwind utilities;
 ```
 
+## File: src/content/types.ts
+```typescript
+export type Status = 'monitoring' | 'running' | 'stopped' | 'error' | 'paused';
+
+export interface IndicatorProps {
+  status: Status;
+  error: string | null;
+  elapsedTime: number;
+  onPauseResume: () => void;
+}
+```
+
 ## File: src/content/useDrag.ts
 ```typescript
-import { useState, useCallback, RefObject } from 'react';
+import { useState, useCallback, RefObject, useEffect, useRef } from 'react';
+
+const STORAGE_KEY = 'indicator-position';
 
 interface Position {
   x: number;
@@ -121,6 +114,25 @@ export function useDrag(ref: RefObject<HTMLElement>) {
     x: window.innerWidth - 250, // Initial position top-right
     y: 20,
   });
+  const positionRef = useRef(position);
+
+  // Load position from storage on initial mount
+  useEffect(() => {
+    chrome.storage.local.get(STORAGE_KEY, (result) => {
+      if (
+        result[STORAGE_KEY] &&
+        typeof result[STORAGE_KEY].x === 'number' &&
+        typeof result[STORAGE_KEY].y === 'number'
+      ) {
+        setPosition(result[STORAGE_KEY]);
+      }
+    });
+  }, []); // Empty dependency array ensures this runs only once on mount
+
+  // Keep ref in sync with state for access in callbacks
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -128,6 +140,7 @@ export function useDrag(ref: RefObject<HTMLElement>) {
       e.preventDefault();
 
       const startPos = { x: e.clientX, y: e.clientY };
+      const elementStartPos = positionRef.current; // Use ref to get position at drag start
       const element = ref.current;
       if (!element) return;
 
@@ -135,20 +148,24 @@ export function useDrag(ref: RefObject<HTMLElement>) {
         const dx = moveEvent.clientX - startPos.x;
         const dy = moveEvent.clientY - startPos.y;
         setPosition({
-          x: position.x + dx,
-          y: position.y + dy,
+          x: elementStartPos.x + dx,
+          y: elementStartPos.y + dy,
         });
       };
 
       const handleMouseUp = () => {
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
+        // On mouse up, the drag is over. The `position` state has been updated
+        // by the last `handleMouseMove`. The `useEffect` listening to `position`
+        // will have updated `positionRef.current`. We can now save it.
+        chrome.storage.local.set({ [STORAGE_KEY]: positionRef.current });
       };
 
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [position.x, position.y, ref]
+    [ref] // No dependency on `position` state
   );
 
   return {
@@ -156,6 +173,15 @@ export function useDrag(ref: RefObject<HTMLElement>) {
     setPosition, // Expose setPosition for potential programmatic updates
     handleMouseDown,
   };
+}
+```
+
+## File: src/types.ts
+```typescript
+export interface NotificationContext {
+  tabId: number;
+  windowId: number;
+  durationMs?: number | null;
 }
 ```
 
@@ -223,144 +249,6 @@ export default defineConfig({
     },
   },
 });
-```
-
-## File: src/content/Indicator.tsx
-```typescript
-import { useRef, useEffect, useState } from 'react';
-import { useDrag } from './useDrag';
-import { statusConfig } from './constants';
-import type { IndicatorProps } from './types';
-
-function formatElapsedTime(ms: number): string {
-  if (ms <= 0) return '00:00';
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  const paddedMinutes = String(minutes).padStart(2, '0');
-  const paddedSeconds = String(seconds).padStart(2, '0');
-  return `${paddedMinutes}:${paddedSeconds}`;
-}
-
-function Indicator({
-  status,
-  error,
-  elapsedTime,
-  onPauseResume,
-}: IndicatorProps) {
-  const indicatorRef = useRef<HTMLDivElement>(null);
-  const { position, handleMouseDown } = useDrag(indicatorRef);
-  const [isVisible, setIsVisible] = useState(true);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  useEffect(() => {
-    // Preload audio element when component mounts
-    const soundUrl = chrome.runtime.getURL('notification.mp3');
-    audioRef.current = new Audio(soundUrl);
-  }, []);
-
-  useEffect(() => {
-    if (status === 'stopped') {
-      audioRef.current
-        ?.play()
-        .catch((err) => console.error('Audio play failed: ', err));
-    }
-  }, [status]);
-
-  if (!isVisible) {
-    return null;
-  }
-
-  const config = statusConfig[status];
-  const isPausable = status === 'running' || status === 'paused';
-
-  return (
-    <div
-      ref={indicatorRef}
-      className="fixed top-0 left-0 z-[99999] rounded-lg shadow-lg text-white font-sans select-none"
-      style={{
-        transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
-        backgroundColor: 'rgba(20, 20, 20, 0.8)',
-        backdropFilter: 'blur(4px)',
-      }}
-    >
-      <div
-        className="flex items-center gap-3 p-2 cursor-grab"
-        onMouseDown={handleMouseDown}
-      >
-        <div className="flex items-center gap-2">
-          <span
-            className={`w-3 h-3 rounded-full ${config.bgColor} ${
-              config.animate ? 'animate-pulse' : ''
-            }`}
-          ></span>
-          <span className="text-sm font-medium">{config.text}</span>
-          {(status === 'running' ||
-            status === 'paused' ||
-            status === 'stopped') && (
-            <span className="text-sm font-mono text-gray-300">
-              {formatElapsedTime(elapsedTime)}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center">
-          {isPausable && (
-            <button
-              onClick={onPauseResume}
-              className="text-gray-400 hover:text-white cursor-pointer p-1 rounded-full"
-              title={status === 'running' ? 'Pause' : 'Resume'}
-            >
-              {status === 'running' ? (
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  className="block"
-                >
-                  <path d="M14 19h4V5h-4v14zm-8 0h4V5H6v14z" />
-                </svg>
-              ) : (
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  className="block"
-                >
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              )}
-            </button>
-          )}
-          <button
-            onClick={() => setIsVisible(false)}
-            className="text-gray-400 hover:text-white cursor-pointer p-1 rounded-full"
-            title="Hide Indicator"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              className="block"
-            >
-              <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" />
-            </svg>
-          </button>
-        </div>
-      </div>
-      {status === 'error' && error && (
-        <p className="text-xs text-red-400 px-2 pb-2 -mt-1">{error}</p>
-      )}
-    </div>
-  );
-}
-
-export default Indicator;
 ```
 
 ## File: .eslintrc.cjs
@@ -464,6 +352,145 @@ module.exports = {
 }
 ```
 
+## File: src/content/Indicator.tsx
+```typescript
+import { useRef, useEffect, useState } from 'react';
+import { useDrag } from './useDrag';
+import { statusConfig } from './constants';
+import type { IndicatorProps } from './types';
+
+function formatElapsedTime(ms: number): string {
+  if (ms <= 0) return '00:00';
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const paddedMinutes = String(minutes).padStart(2, '0');
+  const paddedSeconds = String(seconds).padStart(2, '0');
+  return `${paddedMinutes}:${paddedSeconds}`;
+}
+
+function Indicator({
+  status,
+  error,
+  elapsedTime,
+  onPauseResume,
+}: IndicatorProps) {
+  const indicatorRef = useRef<HTMLDivElement>(null);
+  const { position, handleMouseDown } = useDrag(indicatorRef);
+  const [isVisible, setIsVisible] = useState(true);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    // Preload audio element when component mounts
+    const soundUrl = chrome.runtime.getURL('notification.mp3');
+    audioRef.current = new Audio(soundUrl);
+  }, []);
+
+  useEffect(() => {
+    if (status === 'stopped') {
+      audioRef.current
+        ?.play()
+        .catch((err) => console.error('Audio play failed: ', err));
+    }
+  }, [status]);
+
+  if (!isVisible) {
+    return null;
+  }
+
+  const config = statusConfig[status];
+  const isPausable =
+    status === 'running' || status === 'paused' || status === 'monitoring';
+
+  return (
+    <div
+      ref={indicatorRef}
+      className="fixed top-0 left-0 z-[99999] rounded-lg shadow-lg text-white font-sans select-none"
+      style={{
+        transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
+        backgroundColor: 'rgba(20, 20, 20, 0.8)',
+        backdropFilter: 'blur(4px)',
+      }}
+    >
+      <div
+        className="flex items-center gap-3 p-2 cursor-grab"
+        onMouseDown={handleMouseDown}
+      >
+        <div className="flex items-center gap-2">
+          <span
+            className={`w-3 h-3 rounded-full ${config.bgColor} ${
+              config.animate ? 'animate-pulse' : ''
+            }`}
+          ></span>
+          <span className="text-sm font-medium">{config.text}</span>
+          {(status === 'running' ||
+            status === 'paused' ||
+            status === 'stopped') && (
+            <span className="text-sm font-mono text-gray-300">
+              {formatElapsedTime(elapsedTime)}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center">
+          {isPausable && (
+            <button
+              onClick={onPauseResume}
+              className="text-gray-400 hover:text-white cursor-pointer p-1 rounded-full"
+              title={status === 'paused' ? 'Resume' : 'Pause'}
+            >
+              {status === 'running' || status === 'monitoring' ? (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="block"
+                >
+                  <path d="M14 19h4V5h-4v14zm-8 0h4V5H6v14z" />
+                </svg>
+              ) : (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="block"
+                >
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
+            </button>
+          )}
+          <button
+            onClick={() => setIsVisible(false)}
+            className="text-gray-400 hover:text-white cursor-pointer p-1 rounded-full"
+            title="Hide Indicator"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="block"
+            >
+              <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      {status === 'error' && error && (
+        <p className="text-xs text-red-400 px-2 pb-2 -mt-1">{error}</p>
+      )}
+    </div>
+  );
+}
+
+export default Indicator;
+```
+
 ## File: src/content/App.tsx
 ```typescript
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -477,6 +504,7 @@ function App() {
   const [elapsedTime, setElapsedTime] = useState(0);
   const pausedTimeRef = useRef(0);
   const pauseStartRef = useRef<number | null>(null);
+  const prePauseStatusRef = useRef<Status>('monitoring');
 
   useEffect(() => {
     let intervalId: number | undefined;
@@ -501,25 +529,33 @@ function App() {
 
   const handlePauseResume = useCallback(() => {
     setStatus((currentStatus) => {
-      if (currentStatus === 'running') {
+      if (currentStatus === 'running' || currentStatus === 'monitoring') {
         // Pausing
-        pauseStartRef.current = Date.now();
-        // Update elapsed time one last time before pausing interval
-        if (startTimeRef.current) {
-          setElapsedTime(
-            Date.now() - startTimeRef.current - pausedTimeRef.current
-          );
+        prePauseStatusRef.current = currentStatus; // Store where we came from
+
+        if (currentStatus === 'running') {
+          pauseStartRef.current = Date.now();
+          // Update elapsed time one last time before pausing interval
+          if (startTimeRef.current) {
+            setElapsedTime(
+              Date.now() - startTimeRef.current - pausedTimeRef.current
+            );
+          }
         }
         return 'paused';
       }
 
       if (currentStatus === 'paused') {
         // Resuming
-        if (pauseStartRef.current) {
-          pausedTimeRef.current += Date.now() - pauseStartRef.current;
-          pauseStartRef.current = null;
+        const resumeTo = prePauseStatusRef.current;
+        if (resumeTo === 'running') {
+          if (pauseStartRef.current) {
+            pausedTimeRef.current += Date.now() - pauseStartRef.current;
+            pauseStartRef.current = null;
+          }
         }
-        return 'running';
+        // Resume to the state we were in before pausing
+        return resumeTo;
       }
 
       return currentStatus;
@@ -527,16 +563,14 @@ function App() {
   }, []);
 
   const checkState = useCallback(() => {
-    // When paused, we don't check for state changes.
-    if (status === 'paused') return;
-
     try {
       const stopButtonExists = !!document.querySelector<SVGRectElement>(
         'rect[class*="stoppable-stop"]'
       );
 
       setStatus((prevStatus) => {
-        // Prevent checkState from overriding pause
+        // Prevent checkState from overriding pause. `prevStatus` is the
+        // source of truth from React's state.
         if (prevStatus === 'paused') return 'paused';
 
         const wasRunning = prevStatus === 'running';
@@ -549,13 +583,19 @@ function App() {
             : 0;
           setElapsedTime(finalElapsedTime < 0 ? 0 : finalElapsedTime);
 
-          console.log(
-            'AI Studio process finished. Playing sound and sending desktop notification.'
-          );
-          chrome.runtime.sendMessage({
-            type: 'processFinished',
-            durationMs: finalElapsedTime,
-          });
+          if (finalElapsedTime >= 3000) {
+            console.log(
+              'AI Studio process finished. Sending desktop notification.'
+            );
+            chrome.runtime.sendMessage({
+              type: 'processFinished',
+              durationMs: finalElapsedTime,
+            });
+          } else {
+            console.log(
+              'AI Studio process finished in under 3 seconds. Skipping desktop notification.'
+            );
+          }
           startTimeRef.current = null;
           pausedTimeRef.current = 0;
           pauseStartRef.current = null;
@@ -596,9 +636,16 @@ function App() {
       setError('An error occurred during check.');
       setStatus('error');
     }
-  }, [status]);
+  }, []);
 
   useEffect(() => {
+    // When paused, the observer should not be active to save resources.
+    if (status === 'paused') {
+      // The cleanup function of the previous effect run has already disconnected
+      // the observer. We don't set up a new one while paused.
+      return;
+    }
+
     // Initial Check after a short delay
     const timeoutId = setTimeout(checkState, 2000);
 
@@ -615,8 +662,9 @@ function App() {
     return () => {
       clearTimeout(timeoutId);
       observer.disconnect();
+      console.log('AI Studio Notifier: MutationObserver disconnected.');
     };
-  }, [checkState]);
+  }, [checkState, status]);
 
   return (
     <Indicator

@@ -1,0 +1,432 @@
+uuid: b0c9509a-0e98-4c3c-829d-6ebde26227ad
+projectId: google-ai-studio-notification
+createdAt: '2025-08-05T13:14:05.516Z'
+linesAdded: 12
+linesRemoved: 6
+gitCommitMsg: 'feat: pause mutation observer when timer is paused'
+promptSummary: >-
+  The user wants to make the pause/resume feature more efficient by stopping the
+  MutationObserver when the status is 'paused' to save resources.
+reasoning:
+  - >-
+    Okay! As an expert AI programmer, I will now modify the files to implement
+    the requested changes.
+  - >-
+    I've analyzed the request to make the pause/resume feature more efficient by
+    stopping the `MutationObserver` when the process is paused. This will save
+    resources, as the watcher will not be active in the "standby" (paused)
+    state.
+  - 'Here are the changes I''ll make:'
+  - '1.  **Refactor `checkState` in `src/content/App.tsx`**:'
+  - >-
+    *   I will remove its dependency on the `status` state variable. It will now
+    rely on the `prevStatus` provided by the `setStatus` updater function, which
+    is more robust against stale state.
+  - >-
+    *   This makes the `checkState` function stable (it will be created only
+    once).
+  - >-
+    *   I'll remove the initial check for `paused` status, as it's no longer
+    needed and the check inside `setStatus` is more reliable.
+  - '2.  **Update Observer `useEffect` in `src/content/App.tsx`**:'
+  - >-
+    *   I will add logic to this effect to prevent it from creating a
+    `MutationObserver` when `status` is `'paused'`.
+  - >-
+    *   When the status changes to `'paused'`, the effect's cleanup function
+    from its previous run will disconnect the active observer. The effect will
+    then run again but will exit early, effectively keeping the observer off.
+  - >-
+    *   When the status changes back to `'running'`, the effect will
+    re-establish the observer.
+  - >-
+    *   I'll also add a log message to confirm when the observer is
+    disconnected.
+  - >-
+    These changes will ensure that the DOM is not being observed for changes
+    while the indicator is in a paused state, fulfilling your request.
+  - 'Here are the code modifications:'
+  - >-
+    This completes the requested changes. The observer will now be paused along
+    with the timer, making the extension more efficient.
+operations:
+  - type: write
+    path: src/content/App.tsx
+    content: |-
+      <<<<<<< SEARCH
+        const checkState = useCallback(() => {
+          // When paused, we don't check for state changes.
+          if (status === 'paused') return;
+
+          try {
+            const stopButtonExists = !!document.querySelector<SVGRectElement>(
+              'rect[class*="stoppable-stop"]'
+            );
+
+            setStatus((prevStatus) => {
+              // Prevent checkState from overriding pause
+              if (prevStatus === 'paused') return 'paused';
+
+              const wasRunning = prevStatus === 'running';
+
+              if (wasRunning && !stopButtonExists) {
+                // State transition: running -> stopped
+                const endTime = Date.now();
+                const finalElapsedTime = startTimeRef.current
+                  ? endTime - startTimeRef.current - pausedTimeRef.current
+                  : 0;
+                setElapsedTime(finalElapsedTime < 0 ? 0 : finalElapsedTime);
+
+                if (finalElapsedTime >= 3000) {
+                  console.log(
+                    'AI Studio process finished. Sending desktop notification.'
+                  );
+                  chrome.runtime.sendMessage({
+                    type: 'processFinished',
+                    durationMs: finalElapsedTime,
+                  });
+                } else {
+                  console.log(
+                    'AI Studio process finished in under 3 seconds. Skipping desktop notification.'
+                  );
+                }
+                startTimeRef.current = null;
+                pausedTimeRef.current = 0;
+                pauseStartRef.current = null;
+                return 'stopped';
+              }
+
+              const newStatus = stopButtonExists ? 'running' : 'monitoring';
+
+              if (newStatus === 'running' && prevStatus !== 'running') {
+                // State transition: not running -> running
+                startTimeRef.current = Date.now();
+                pausedTimeRef.current = 0;
+                pauseStartRef.current = null;
+                setElapsedTime(0);
+              }
+
+              if (
+                prevStatus !== newStatus &&
+                !(prevStatus === 'stopped' && newStatus === 'monitoring')
+              ) {
+                console.log(
+                  `AI Studio Notifier: State changed to ${
+                    stopButtonExists ? 'Running' : 'Monitoring'
+                  }`
+                );
+              }
+              // If we were stopped, and a new process hasn't started, stay stopped visually
+              // until a new run starts.
+              if (prevStatus === 'stopped' && !stopButtonExists) {
+                return 'stopped';
+              }
+
+              return newStatus;
+            });
+            setError(null);
+          } catch (e) {
+            console.error('AI Studio Notifier: Error during state check.', e);
+            setError('An error occurred during check.');
+            setStatus('error');
+          }
+        }, [status]);
+      =======
+        const checkState = useCallback(() => {
+          try {
+            const stopButtonExists = !!document.querySelector<SVGRectElement>(
+              'rect[class*="stoppable-stop"]'
+            );
+
+            setStatus((prevStatus) => {
+              // Prevent checkState from overriding pause. `prevStatus` is the
+              // source of truth from React's state.
+              if (prevStatus === 'paused') return 'paused';
+
+              const wasRunning = prevStatus === 'running';
+
+              if (wasRunning && !stopButtonExists) {
+                // State transition: running -> stopped
+                const endTime = Date.now();
+                const finalElapsedTime = startTimeRef.current
+                  ? endTime - startTimeRef.current - pausedTimeRef.current
+                  : 0;
+                setElapsedTime(finalElapsedTime < 0 ? 0 : finalElapsedTime);
+
+                if (finalElapsedTime >= 3000) {
+                  console.log(
+                    'AI Studio process finished. Sending desktop notification.'
+                  );
+                  chrome.runtime.sendMessage({
+                    type: 'processFinished',
+                    durationMs: finalElapsedTime,
+                  });
+                } else {
+                  console.log(
+                    'AI Studio process finished in under 3 seconds. Skipping desktop notification.'
+                  );
+                }
+                startTimeRef.current = null;
+                pausedTimeRef.current = 0;
+                pauseStartRef.current = null;
+                return 'stopped';
+              }
+
+              const newStatus = stopButtonExists ? 'running' : 'monitoring';
+
+              if (newStatus === 'running' && prevStatus !== 'running') {
+                // State transition: not running -> running
+                startTimeRef.current = Date.now();
+                pausedTimeRef.current = 0;
+                pauseStartRef.current = null;
+                setElapsedTime(0);
+              }
+
+              if (
+                prevStatus !== newStatus &&
+                !(prevStatus === 'stopped' && newStatus === 'monitoring')
+              ) {
+                console.log(
+                  `AI Studio Notifier: State changed to ${
+                    stopButtonExists ? 'Running' : 'Monitoring'
+                  }`
+                );
+              }
+              // If we were stopped, and a new process hasn't started, stay stopped visually
+              // until a new run starts.
+              if (prevStatus === 'stopped' && !stopButtonExists) {
+                return 'stopped';
+              }
+
+              return newStatus;
+            });
+            setError(null);
+          } catch (e) {
+            console.error('AI Studio Notifier: Error during state check.', e);
+            setError('An error occurred during check.');
+            setStatus('error');
+          }
+        }, []);
+      >>>>>>> REPLACE
+      <<<<<<< SEARCH
+        useEffect(() => {
+          // Initial Check after a short delay
+          const timeoutId = setTimeout(checkState, 2000);
+
+          // Observer Setup
+          const observer = new MutationObserver(checkState);
+          observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+          });
+          console.log(
+            'AI Studio Notifier: MutationObserver is now watching the page.'
+          );
+
+          return () => {
+            clearTimeout(timeoutId);
+            observer.disconnect();
+          };
+        }, [checkState]);
+      =======
+        useEffect(() => {
+          // When paused, the observer should not be active to save resources.
+          if (status === 'paused') {
+            // The cleanup function of the previous effect run has already disconnected
+            // the observer. We don't set up a new one while paused.
+            return;
+          }
+
+          // Initial Check after a short delay
+          const timeoutId = setTimeout(checkState, 2000);
+
+          // Observer Setup
+          const observer = new MutationObserver(checkState);
+          observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+          });
+          console.log(
+            'AI Studio Notifier: MutationObserver is now watching the page.'
+          );
+
+          return () => {
+            clearTimeout(timeoutId);
+            observer.disconnect();
+            console.log('AI Studio Notifier: MutationObserver disconnected.');
+          };
+        }, [checkState, status]);
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+snapshot:
+  src/content/App.tsx: |-
+    import { useState, useEffect, useCallback, useRef } from 'react';
+    import Indicator from './Indicator';
+    import type { Status } from './types';
+
+    function App() {
+      const [status, setStatus] = useState<Status>('monitoring');
+      const [error, setError] = useState<string | null>(null);
+      const startTimeRef = useRef<number | null>(null);
+      const [elapsedTime, setElapsedTime] = useState(0);
+      const pausedTimeRef = useRef(0);
+      const pauseStartRef = useRef<number | null>(null);
+
+      useEffect(() => {
+        let intervalId: number | undefined;
+
+        if (status === 'running') {
+          intervalId = window.setInterval(() => {
+            if (startTimeRef.current) {
+              const now = Date.now();
+              const totalElapsed =
+                now - startTimeRef.current - pausedTimeRef.current;
+              setElapsedTime(totalElapsed);
+            }
+          }, 1000);
+        }
+
+        return () => {
+          if (intervalId) {
+            clearInterval(intervalId);
+          }
+        };
+      }, [status]);
+
+      const handlePauseResume = useCallback(() => {
+        setStatus((currentStatus) => {
+          if (currentStatus === 'running') {
+            // Pausing
+            pauseStartRef.current = Date.now();
+            // Update elapsed time one last time before pausing interval
+            if (startTimeRef.current) {
+              setElapsedTime(
+                Date.now() - startTimeRef.current - pausedTimeRef.current
+              );
+            }
+            return 'paused';
+          }
+
+          if (currentStatus === 'paused') {
+            // Resuming
+            if (pauseStartRef.current) {
+              pausedTimeRef.current += Date.now() - pauseStartRef.current;
+              pauseStartRef.current = null;
+            }
+            return 'running';
+          }
+
+          return currentStatus;
+        });
+      }, []);
+
+      const checkState = useCallback(() => {
+        // When paused, we don't check for state changes.
+        if (status === 'paused') return;
+
+        try {
+          const stopButtonExists = !!document.querySelector<SVGRectElement>(
+            'rect[class*="stoppable-stop"]'
+          );
+
+          setStatus((prevStatus) => {
+            // Prevent checkState from overriding pause
+            if (prevStatus === 'paused') return 'paused';
+
+            const wasRunning = prevStatus === 'running';
+
+            if (wasRunning && !stopButtonExists) {
+              // State transition: running -> stopped
+              const endTime = Date.now();
+              const finalElapsedTime = startTimeRef.current
+                ? endTime - startTimeRef.current - pausedTimeRef.current
+                : 0;
+              setElapsedTime(finalElapsedTime < 0 ? 0 : finalElapsedTime);
+
+              if (finalElapsedTime >= 3000) {
+                console.log(
+                  'AI Studio process finished. Sending desktop notification.'
+                );
+                chrome.runtime.sendMessage({
+                  type: 'processFinished',
+                  durationMs: finalElapsedTime,
+                });
+              } else {
+                console.log(
+                  'AI Studio process finished in under 3 seconds. Skipping desktop notification.'
+                );
+              }
+              startTimeRef.current = null;
+              pausedTimeRef.current = 0;
+              pauseStartRef.current = null;
+              return 'stopped';
+            }
+
+            const newStatus = stopButtonExists ? 'running' : 'monitoring';
+
+            if (newStatus === 'running' && prevStatus !== 'running') {
+              // State transition: not running -> running
+              startTimeRef.current = Date.now();
+              pausedTimeRef.current = 0;
+              pauseStartRef.current = null;
+              setElapsedTime(0);
+            }
+
+            if (
+              prevStatus !== newStatus &&
+              !(prevStatus === 'stopped' && newStatus === 'monitoring')
+            ) {
+              console.log(
+                `AI Studio Notifier: State changed to ${
+                  stopButtonExists ? 'Running' : 'Monitoring'
+                }`
+              );
+            }
+            // If we were stopped, and a new process hasn't started, stay stopped visually
+            // until a new run starts.
+            if (prevStatus === 'stopped' && !stopButtonExists) {
+              return 'stopped';
+            }
+
+            return newStatus;
+          });
+          setError(null);
+        } catch (e) {
+          console.error('AI Studio Notifier: Error during state check.', e);
+          setError('An error occurred during check.');
+          setStatus('error');
+        }
+      }, [status]);
+
+      useEffect(() => {
+        // Initial Check after a short delay
+        const timeoutId = setTimeout(checkState, 2000);
+
+        // Observer Setup
+        const observer = new MutationObserver(checkState);
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true,
+        });
+        console.log(
+          'AI Studio Notifier: MutationObserver is now watching the page.'
+        );
+
+        return () => {
+          clearTimeout(timeoutId);
+          observer.disconnect();
+        };
+      }, [checkState]);
+
+      return (
+        <Indicator
+          status={status}
+          error={error}
+          elapsedTime={elapsedTime}
+          onPauseResume={handlePauseResume}
+        />
+      );
+    }
+
+    export default App;
+approved: true

@@ -35,15 +35,18 @@ function formatDuration(ms: number | null | undefined): string {
  */
 function createNotification(context: NotificationContext) {
   const durationString = formatDuration(context.durationMs);
-  const message = `Your process has finished!${
-    durationString ? ` ${durationString}` : ''
+  const title = context.runName
+    ? `Finished: ${context.runName}`
+    : 'AI Studio Process Finished';
+  const message = `Your process has finished running${
+    durationString ? ` ${durationString}` : '.'
   }`;
   // The notificationId is guaranteed to be unique for the session.
   chrome.notifications.create(
     {
       type: 'basic',
       iconUrl: 'icon128.png',
-      title: 'AI Studio',
+      title: title,
       message: message,
       priority: 2,
       // `requireInteraction: false` is the default. It means the notification
@@ -53,7 +56,7 @@ function createNotification(context: NotificationContext) {
       buttons: [
         { title: 'Go To Tab' },
         { title: 'Dismiss' },
-        { title: 'Remind 5 in' },
+        { title: 'Remind in 5 min' },
       ],
     },
     (notificationId) => {
@@ -78,6 +81,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
         tabId: sender.tab.id,
         windowId: sender.tab.windowId,
         durationMs: message.durationMs,
+        runName: message.runName,
       };
       createNotification(context);
     } else {
@@ -110,7 +114,7 @@ chrome.notifications.onButtonClicked.addListener(
       case 1: // Dismiss
         chrome.notifications.clear(notificationId);
         break;
-      case 2: // Remind 5 min 5 min
+      case 2: // Remind in 5 min
         {
           const alarmName = `remind-${notificationId}`;
           // Store context for when the alarm fires

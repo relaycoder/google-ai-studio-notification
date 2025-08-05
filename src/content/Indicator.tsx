@@ -18,6 +18,7 @@ function Indicator({
   error,
   elapsedTime,
   onPauseResume,
+  runName,
 }: IndicatorProps) {
   const indicatorRef = useRef<HTMLDivElement>(null);
   const { position, handleMouseDown } = useDrag(indicatorRef);
@@ -43,7 +44,8 @@ function Indicator({
   }
 
   const config = statusConfig[status];
-  const isPausable = status === 'running' || status === 'paused';
+  const isPausable =
+    status === 'running' || status === 'paused' || status === 'monitoring';
 
   return (
     <div
@@ -66,6 +68,11 @@ function Indicator({
             }`}
           ></span>
           <span className="text-sm font-medium">{config.text}</span>
+          {runName && (
+            <span className="text-sm font-light text-gray-300 truncate max-w-[150px] pl-1">
+              - {runName}
+            </span>
+          )}
           {(status === 'running' ||
             status === 'paused' ||
             status === 'stopped') && (
@@ -79,9 +86,9 @@ function Indicator({
             <button
               onClick={onPauseResume}
               className="text-gray-400 hover:text-white cursor-pointer p-1 rounded-full"
-              title={status === 'running' ? 'Pause' : 'Resume'}
+              title={status === 'paused' ? 'Resume' : 'Pause'}
             >
-              {status === 'running' ? (
+              {status === 'running' || status === 'monitoring' ? (
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   width="12"

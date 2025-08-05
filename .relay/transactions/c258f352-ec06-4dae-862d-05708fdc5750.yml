@@ -1,0 +1,220 @@
+uuid: c258f352-ec06-4dae-862d-05708fdc5750
+projectId: google-ai-studio-notification
+createdAt: '2025-08-05T13:31:35.970Z'
+linesAdded: 30
+linesRemoved: 4
+gitCommitMsg: 'feat: persist indicator position in local storage'
+promptSummary: Make the indicator's position persistent using chrome.storage.local.
+reasoning:
+  - >-
+    Of course! As an expert AI programmer, I can certainly help with that.
+    Persisting the indicator's position is a great user experience improvement.
+    Here are the required changes to achieve this.
+  - >-
+    I'll modify the `useDrag` hook to handle saving the position to
+    `chrome.storage.local` when a drag operation completes, and loading it when
+    the component first mounts. This encapsulates all the logic within the hook
+    itself, requiring no changes to other components.
+  - '### Step-by-step Reasoning'
+  - >-
+    1.  **File `src/content/useDrag.ts`**: This is the only file that needs to
+    be modified.
+  - >-
+    2.  **Import Hooks**: I'll import `useEffect` and `useRef` from React, as
+    they are needed for side effects (storage access) and for keeping a stable
+    reference to the latest position value across re-renders.
+  - >-
+    3.  **Initial Load**: I'll add a `useEffect` hook with an empty dependency
+    array (`[]`). This ensures it runs only once when the hook is first used.
+    Inside, it will call `chrome.storage.local.get()` to retrieve any saved
+    position. If a position is found, it updates the component's state.
+  - '4.  **Saving on Drag End**:'
+  - >-
+    *   To solve the stale closure problem and get the final position
+    accurately, I'll use a `useRef` (`positionRef`) to hold the latest position
+    value. A separate `useEffect` will keep this ref synchronized with the
+    `position` state whenever it changes.
+  - >-
+    *   The `handleMouseDown` callback will be modified to no longer depend on
+    the `position` state. This means the callback and its inner functions
+    (`handleMouseMove`, `handleMouseUp`) are created only once.
+  - >-
+    *   When a drag starts, `handleMouseDown` will read the element's starting
+    position from `positionRef.current`.
+  - >-
+    *   The `handleMouseUp` function, which is called when the drag ends, will
+    read the final position from `positionRef.current` (which has been kept
+    up-to-date) and save it to `chrome.storage.local`. This is efficient as it
+    only writes to storage once per drag operation.
+  - 'Here is the patch for `src/content/useDrag.ts`:'
+  - >-
+    This single change correctly implements the desired persistence feature in a
+    clean and efficient way.
+  - '---'
+operations:
+  - type: write
+    path: src/content/useDrag.ts
+    content: >-
+      --- src/content/useDrag.ts
+
+      +++ src/content/useDrag.ts
+
+      @@ -1,40 +1,72 @@
+
+      -import { useState, useCallback, RefObject } from 'react';
+
+      +import { useState, useCallback, RefObject, useEffect, useRef } from
+      'react';
+
+      +
+
+      +const STORAGE_KEY = 'indicator-position';
+       
+       interface Position {
+         x: number;
+         y: number;
+       }
+       
+       export function useDrag(ref: RefObject<HTMLElement>) {
+         const [position, setPosition] = useState<Position>({
+           x: window.innerWidth - 250, // Initial position top-right
+           y: 20,
+         });
+      +  const positionRef = useRef(position);
+
+      +
+
+      +  // Load position from storage on initial mount
+
+      +  useEffect(() => {
+
+      +    chrome.storage.local.get(STORAGE_KEY, (result) => {
+
+      +      if (
+
+      +        result[STORAGE_KEY] &&
+
+      +        typeof result[STORAGE_KEY].x === 'number' &&
+
+      +        typeof result[STORAGE_KEY].y === 'number'
+
+      +      ) {
+
+      +        setPosition(result[STORAGE_KEY]);
+
+      +      }
+
+      +    });
+
+      +  }, []); // Empty dependency array ensures this runs only once on mount
+
+      +
+
+      +  // Keep ref in sync with state for access in callbacks
+
+      +  useEffect(() => {
+
+      +    positionRef.current = position;
+
+      +  }, [position]);
+       
+         const handleMouseDown = useCallback(
+           (e: React.MouseEvent<HTMLDivElement>) => {
+             // Prevents text selection while dragging
+             e.preventDefault();
+       
+             const startPos = { x: e.clientX, y: e.clientY };
+      +      const elementStartPos = positionRef.current; // Use ref to get
+      position at drag start
+             const element = ref.current;
+             if (!element) return;
+       
+             const handleMouseMove = (moveEvent: MouseEvent) => {
+               const dx = moveEvent.clientX - startPos.x;
+               const dy = moveEvent.clientY - startPos.y;
+               setPosition({
+      -          x: position.x + dx,
+
+      -          y: position.y + dy,
+
+      +          x: elementStartPos.x + dx,
+
+      +          y: elementStartPos.y + dy,
+               });
+             };
+       
+             const handleMouseUp = () => {
+               document.removeEventListener('mousemove', handleMouseMove);
+               document.removeEventListener('mouseup', handleMouseUp);
+      +        // On mouse up, the drag is over. The `position` state has been
+      updated
+
+      +        // by the last `handleMouseMove`. The `useEffect` listening to
+      `position`
+
+      +        // will have updated `positionRef.current`. We can now save it.
+
+      +        chrome.storage.local.set({ [STORAGE_KEY]: positionRef.current });
+             };
+       
+             document.addEventListener('mousemove', handleMouseMove);
+             document.addEventListener('mouseup', handleMouseUp);
+           },
+      -    [position.x, position.y, ref]
+
+      +    [ref] // No dependency on `position` state
+         );
+       
+         return {
+    patchStrategy: new-unified
+snapshot:
+  src/content/useDrag.ts: |-
+    import { useState, useCallback, RefObject } from 'react';
+
+    interface Position {
+      x: number;
+      y: number;
+    }
+
+    export function useDrag(ref: RefObject<HTMLElement>) {
+      const [position, setPosition] = useState<Position>({
+        x: window.innerWidth - 250, // Initial position top-right
+        y: 20,
+      });
+
+      const handleMouseDown = useCallback(
+        (e: React.MouseEvent<HTMLDivElement>) => {
+          // Prevents text selection while dragging
+          e.preventDefault();
+
+          const startPos = { x: e.clientX, y: e.clientY };
+          const element = ref.current;
+          if (!element) return;
+
+          const handleMouseMove = (moveEvent: MouseEvent) => {
+            const dx = moveEvent.clientX - startPos.x;
+            const dy = moveEvent.clientY - startPos.y;
+            setPosition({
+              x: position.x + dx,
+              y: position.y + dy,
+            });
+          };
+
+          const handleMouseUp = () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+          };
+
+          document.addEventListener('mousemove', handleMouseMove);
+          document.addEventListener('mouseup', handleMouseUp);
+        },
+        [position.x, position.y, ref]
+      );
+
+      return {
+        position,
+        setPosition, // Expose setPosition for potential programmatic updates
+        handleMouseDown,
+      };
+    }
+approved: true
