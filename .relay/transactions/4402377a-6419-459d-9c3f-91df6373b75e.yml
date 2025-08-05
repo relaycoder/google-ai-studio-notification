@@ -1,0 +1,684 @@
+uuid: 4402377a-6419-459d-9c3f-91df6373b75e
+projectId: google-ai-studio-notification
+createdAt: '2025-08-05T14:30:04.907Z'
+linesAdded: 98
+linesRemoved: 59
+gitCommitMsg: 'refactor(indicator): improve history view with master-detail layout'
+promptSummary: >-
+  The user wants to improve the UI/UX of the expanded indicator. The current
+  implementation is not friendly for multi-tab switching with many run
+  histories. I've refactored the expanded view to use a master-detail layout,
+  with a sidebar for tab selection and a main area for the selected tab's
+  history.
+reasoning:
+  - >-
+    I've analyzed the request to improve the UI/UX of the expanded indicator.
+    The current implementation lists histories from all tabs in a single, long
+    scrollable view, which can be cumbersome.
+  - >-
+    To address this, I will refactor the expanded view in
+    `src/content/Indicator.tsx` to use a master-detail layout. This new design
+    will feature:
+  - 1.  A sidebar on the left listing all tabs that have run histories.
+  - >-
+    2.  A main content area on the right that displays the detailed run history
+    for the tab selected in the sidebar.
+  - >-
+    3.  The component will now manage which tab's history is being viewed. It
+    will intelligently select a default tab to show when the history view is
+    first expanded.
+  - >-
+    These changes will be confined to `src/content/Indicator.tsx` and will make
+    navigating through multiple tabs' histories much more intuitive.
+  - '---'
+operations:
+  - type: write
+    path: src/content/Indicator.tsx
+    content: >-
+      --- src/content/Indicator.tsx
+
+      +++ src/content/Indicator.tsx
+
+      @@ -1,4 +1,4 @@
+
+      -import { useRef, useEffect, useState, useCallback } from 'react';
+
+      +import { useRef, useEffect, useState, useCallback, useMemo } from
+      'react';
+       import { useMovable } from './useMovable';
+       import { statusConfig } from './constants';
+       import type { IndicatorProps, RunHistoryEntry, TabState } from '../types';
+      @@ -43,45 +43,6 @@
+         );
+       }
+       
+      -function TabHistory({
+
+      -  tabState,
+
+      -  onNavigate,
+
+      -  isFirst,
+
+      -}: {
+
+      -  tabState: TabState;
+
+      -  onNavigate: (tabId: number, windowId: number) => void;
+
+      -  isFirst: boolean;
+
+      -}) {
+
+      -  if (tabState.history.length === 0) return null;
+
+      -
+
+      -  return (
+
+      -    <div className={isFirst ? '' : 'mt-2 border-t border-white/10 pt-2'}>
+
+      -      <button
+
+      -        className="text-xs font-bold text-gray-200 px-2 py-1
+      cursor-pointer hover:underline truncate w-full text-left"
+
+      -        onClick={() => onNavigate(tabState.tabId, tabState.windowId)}
+
+      -        title={tabState.history[0].runName || `Tab ${tabState.tabId}`}
+
+      -      >
+
+      -        Tab: {tabState.history[0].runName || `Tab ${tabState.tabId}`}
+
+      -      </button>
+
+      -      <div className="flex flex-col gap-0.5">
+
+      -        {tabState.history.map((entry) => (
+
+      -          <HistoryEntry
+
+      -            key={entry.id}
+
+      -            entry={entry}
+
+      -            onNavigate={() => onNavigate(tabState.tabId,
+      tabState.windowId)}
+
+      -          />
+
+      -        ))}
+
+      -      </div>
+
+      -    </div>
+
+      -  );
+
+      -}
+
+      -
+       function Indicator({
+         currentTabState,
+         allTabsState,
+      @@ -90,13 +51,52 @@
+         onNavigate,
+       }: IndicatorProps) {
+         const indicatorRef = useRef<HTMLDivElement>(null);
+         const [isExpanded, setIsExpanded] = useState(false);
+      +  const [selectedTabIdForHistory, setSelectedTabIdForHistory] =
+
+      +    useState<number | null>(null);
+
+      +
+
+      +  const historyTabs = useMemo(
+
+      +    () =>
+
+      +      Object.values(allTabsState)
+
+      +        .filter((tab) => tab.history.length > 0)
+
+      +        .sort((a, b) => {
+
+      +          const aLast = a.history[0]?.endTime ?? 0;
+
+      +          const bLast = b.history[0]?.endTime ?? 0;
+
+      +          return bLast - aLast;
+
+      +        }),
+
+      +    [allTabsState]
+
+      +  );
+
+      +
+
+      +  useEffect(() => {
+
+      +    if (isExpanded) {
+
+      +      const isSelectionValid = historyTabs.some(
+
+      +        (t) => t.tabId === selectedTabIdForHistory
+
+      +      );
+
+      +
+
+      +      if (!isSelectionValid) {
+
+      +        if (historyTabs.find((t) => t.tabId === currentTabState.tabId)) {
+
+      +          setSelectedTabIdForHistory(currentTabState.tabId);
+
+      +        } else if (historyTabs.length > 0) {
+
+      +          setSelectedTabIdForHistory(historyTabs[0].tabId);
+
+      +        } else {
+
+      +          // No history, so collapse
+
+      +          setIsExpanded(false);
+
+      +        }
+
+      +      }
+
+      +    } else {
+
+      +      setSelectedTabIdForHistory(null);
+
+      +    }
+
+      +  }, [isExpanded, historyTabs, currentTabState.tabId,
+      selectedTabIdForHistory]);
+       
+         const handleToggleExpand = useCallback(() => {
+           // Only allow expanding if there is history to show
+      -    if (Object.values(allTabsState).some((tab) => tab.history.length >
+      0)) {
+
+      +    if (historyTabs.length > 0) {
+             setIsExpanded((expanded) => !expanded);
+           }
+      -  }, [allTabsState]);
+
+      +  }, [historyTabs]);
+       
+         const { position, size, handleMouseDown, handleMouseMoveForCursor } =
+           useMovable(indicatorRef, {
+      @@ -124,15 +124,6 @@
+           currentTabState.status === 'paused' ||
+           currentTabState.status === 'monitoring';
+       
+      -  const historyTabs = Object.values(allTabsState)
+
+      -    .filter((tab) => tab.history.length > 0)
+
+      -    .sort((a, b) => {
+
+      -      const aLast = a.history[0]?.endTime ?? 0;
+
+      -      const bLast = b.history[0]?.endTime ?? 0;
+
+      -      return bLast - aLast;
+
+      -    });
+
+      -
+         const totalRuns = historyTabs.reduce(
+           (sum, tab) => sum + tab.history.length,
+           0
+      @@ -231,22 +222,57 @@
+             {/* Expanded History View */}
+             {isExpanded && (
+               <>
+      -          <div className="flex-grow overflow-y-auto px-2 pt-2 border-t
+      border-white/20 min-h-0">
+
+      -            {historyTabs.length > 0 ? (
+
+      -              historyTabs.map((tabState, index) => (
+
+      -                <TabHistory
+
+      -                  key={tabState.tabId}
+
+      -                  tabState={tabState}
+
+      -                  onNavigate={onNavigate}
+
+      -                  isFirst={index === 0}
+
+      -                />
+
+      -              ))
+
+      -            ) : (
+
+      -              <p className="text-xs text-gray-400 text-center py-2">
+
+      -                No completed runs in this session.
+
+      -              </p>
+
+      -            )}
+
+      +          <div className="flex-grow flex border-t border-white/20
+      min-h-0">
+
+      +            {/* Sidebar */}
+
+      +            <div className="w-32 border-r border-white/10 overflow-y-auto
+      flex-shrink-0 flex flex-col py-1">
+
+      +              {historyTabs.map((tab) => {
+
+      +                const tabDisplayName =
+
+      +                  tab.history[0]?.runName || `Tab ${tab.tabId}`;
+
+      +                const isSelected = selectedTabIdForHistory === tab.tabId;
+
+      +                return (
+
+      +                  <button
+
+      +                    key={tab.tabId}
+
+      +                    onClick={() => setSelectedTabIdForHistory(tab.tabId)}
+
+      +                    className={`w-full text-left p-2 text-xs ${
+
+      +                      isSelected ? 'bg-white/10' : 'hover:bg-white/5'
+
+      +                    }`}
+
+      +                    title={tabDisplayName}
+
+      +                  >
+
+      +                    <div className="font-bold text-gray-200 truncate">
+
+      +                      {tabDisplayName}
+
+      +                    </div>
+
+      +                    <div className="text-gray-400">
+
+      +                      {tab.history.length} run
+
+      +                      {tab.history.length !== 1 ? 's' : ''}
+
+      +                    </div>
+
+      +                  </button>
+
+      +                );
+
+      +              })}
+
+      +            </div>
+
+      +            {/* Main Content */}
+
+      +            <div className="flex-grow overflow-y-auto">
+
+      +              {(() => {
+
+      +                const selectedTabData = selectedTabIdForHistory
+
+      +                  ? allTabsState[selectedTabIdForHistory]
+
+      +                  : null;
+
+      +
+
+      +                if (!selectedTabData) {
+
+      +                  return (
+
+      +                    <p className="text-xs text-gray-400 text-center
+      py-4">
+
+      +                      Select a tab to view its history.
+
+      +                    </p>
+
+      +                  );
+
+      +                }
+
+      +
+
+      +                return (
+
+      +                  <div className="flex flex-col gap-0.5 p-2">
+
+      +                    {selectedTabData.history.map((entry) => (
+
+      +                      <HistoryEntry
+
+      +                        key={entry.id}
+
+      +                        entry={entry}
+
+      +                        onNavigate={() =>
+
+      +                          onNavigate(
+
+      +                            selectedTabData.tabId,
+
+      +                            selectedTabData.windowId
+
+      +                          )
+
+      +                        }
+
+      +                      />
+
+      +                    ))}
+
+      +                  </div>
+
+      +                );
+
+      +              })()}
+
+      +            </div>
+                 </div>
+                 {historyTabs.length > 0 ? (
+                   <div className="flex-shrink-0 text-xs text-gray-400 px-3 py-1.5 border-t border-white/20 flex justify-between">
+    patchStrategy: new-unified
+snapshot:
+  src/content/Indicator.tsx: |-
+    import { useRef, useEffect, useState, useCallback } from 'react';
+    import { useMovable } from './useMovable';
+    import { statusConfig } from './constants';
+    import type { IndicatorProps, RunHistoryEntry, TabState } from '../types';
+
+    function formatElapsedTime(ms: number): string {
+      if (ms <= 0) return '00:00';
+      const totalSeconds = Math.floor(ms / 1000);
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      const paddedMinutes = String(minutes).padStart(2, '0');
+      const paddedSeconds = String(seconds).padStart(2, '0');
+      return `${paddedMinutes}:${paddedSeconds}`;
+    }
+
+    function HistoryEntry({
+      entry,
+      onNavigate,
+    }: {
+      entry: RunHistoryEntry;
+      onNavigate: () => void;
+    }) {
+      return (
+        <button
+          className="flex items-center justify-between text-xs w-full px-2 py-1 hover:bg-white/10 rounded text-left"
+          onClick={onNavigate}
+        >
+          <div className="flex items-center gap-2">
+            <span
+              className={
+                entry.status === 'stopped' ? 'text-green-400' : 'text-red-400'
+              }
+            >
+              {entry.status === 'stopped' ? '✔' : '✖'}
+            </span>
+            <span className="truncate text-gray-300">
+              {entry.runName || 'Untitled Run'}
+            </span>
+          </div>
+          <span className="font-mono text-gray-400 pl-2">
+            {formatElapsedTime(entry.durationMs)}
+          </span>
+        </button>
+      );
+    }
+
+    function TabHistory({
+      tabState,
+      onNavigate,
+      isFirst,
+    }: {
+      tabState: TabState;
+      onNavigate: (tabId: number, windowId: number) => void;
+      isFirst: boolean;
+    }) {
+      if (tabState.history.length === 0) return null;
+
+      return (
+        <div className={isFirst ? '' : 'mt-2 border-t border-white/10 pt-2'}>
+          <button
+            className="text-xs font-bold text-gray-200 px-2 py-1 cursor-pointer hover:underline truncate w-full text-left"
+            onClick={() => onNavigate(tabState.tabId, tabState.windowId)}
+            title={tabState.history[0].runName || `Tab ${tabState.tabId}`}
+          >
+            Tab: {tabState.history[0].runName || `Tab ${tabState.tabId}`}
+          </button>
+          <div className="flex flex-col gap-0.5">
+            {tabState.history.map((entry) => (
+              <HistoryEntry
+                key={entry.id}
+                entry={entry}
+                onNavigate={() => onNavigate(tabState.tabId, tabState.windowId)}
+              />
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function Indicator({
+      currentTabState,
+      allTabsState,
+      onPauseResume,
+      onClose,
+      onNavigate,
+    }: IndicatorProps) {
+      const indicatorRef = useRef<HTMLDivElement>(null);
+      const [isExpanded, setIsExpanded] = useState(false);
+
+      const handleToggleExpand = useCallback(() => {
+        // Only allow expanding if there is history to show
+        if (Object.values(allTabsState).some((tab) => tab.history.length > 0)) {
+          setIsExpanded((expanded) => !expanded);
+        }
+      }, [allTabsState]);
+
+      const { position, size, handleMouseDown, handleMouseMoveForCursor } =
+        useMovable(indicatorRef, {
+          onDragHandleClick: handleToggleExpand,
+          isResizable: isExpanded,
+          dragHandleClassName: 'drag-handle',
+        });
+      const audioRef = useRef<HTMLAudioElement | null>(null);
+
+      useEffect(() => {
+        // Preload audio element when component mounts
+        const soundUrl = chrome.runtime.getURL('notification.mp3');
+        audioRef.current = new Audio(soundUrl);
+      }, []);
+
+      useEffect(() => {
+        if (currentTabState?.status === 'stopped') {
+          audioRef.current
+            ?.play()
+            .catch((err) => console.error('Audio play failed: ', err));
+        }
+      }, [currentTabState?.status]);
+
+      if (!currentTabState) {
+        return null;
+      }
+
+      const config = statusConfig[currentTabState.status];
+      const isPausable =
+        currentTabState.status === 'running' ||
+        currentTabState.status === 'paused' ||
+        currentTabState.status === 'monitoring';
+
+      const historyTabs = Object.values(allTabsState)
+        .filter((tab) => tab.history.length > 0)
+        .sort((a, b) => {
+          const aLast = a.history[0]?.endTime ?? 0;
+          const bLast = b.history[0]?.endTime ?? 0;
+          return bLast - aLast;
+        });
+
+      const totalRuns = historyTabs.reduce(
+        (sum, tab) => sum + tab.history.length,
+        0
+      );
+      const totalDuration = historyTabs.reduce(
+        (sum: number, tab: TabState) =>
+          sum +
+          tab.history.reduce(
+            (tabSum: number, run: RunHistoryEntry) => tabSum + run.durationMs,
+            0
+          ),
+        0
+      );
+      const avgDuration = totalRuns > 0 ? totalDuration / totalRuns : 0;
+
+      return (
+        <div
+          ref={indicatorRef}
+          className="fixed top-0 left-0 z-[99999] rounded-lg shadow-lg text-white font-sans select-none flex flex-col"
+          style={{
+            transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
+            backgroundColor: 'rgba(20, 20, 20, 0.8)',
+            backdropFilter: 'blur(4px)',
+            width: isExpanded ? `${size.width}px` : '256px',
+            height: isExpanded ? `${size.height}px` : 'auto',
+          }}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMoveForCursor}
+        >
+          <div className="drag-handle flex items-center gap-3 p-2 cursor-grab flex-shrink-0">
+            <div className="flex items-center gap-2 flex-grow min-w-0">
+              <span
+                className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                  config.bgColor
+                } ${config.animate ? 'animate-pulse' : ''}`}
+              ></span>
+              <span className="text-sm font-medium truncate">
+                {currentTabState.runName
+                  ? currentTabState.runName
+                  : config.text}
+              </span>
+              {(currentTabState.status === 'running' ||
+                currentTabState.status === 'paused' ||
+                currentTabState.status === 'stopped') && (
+                <span className="text-sm font-mono text-gray-300">
+                  {formatElapsedTime(currentTabState.elapsedTime)}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center flex-shrink-0">
+              {isPausable && (
+                <button
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={onPauseResume}
+                  className="text-gray-400 hover:text-white cursor-pointer p-1 rounded-full"
+                  title={currentTabState.status === 'paused' ? 'Resume' : 'Pause'}
+                >
+                  {currentTabState.status === 'running' ||
+                  currentTabState.status === 'monitoring' ? (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      className="block"
+                    >
+                      <path d="M14 19h4V5h-4v14zm-8 0h4V5H6v14z" />
+                    </svg>
+                  ) : (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      className="block"
+                    >
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  )}
+                </button>
+              )}
+              <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={onClose}
+                className="text-gray-400 hover:text-white cursor-pointer p-1 rounded-full"
+                title="Hide Indicator"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="block"
+                >
+                  <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          {currentTabState.status === 'error' && currentTabState.error && (
+            <p className="text-xs text-red-400 px-2 pb-2 -mt-1">
+              {currentTabState.error}
+            </p>
+          )}
+
+          {/* Expanded History View */}
+          {isExpanded && (
+            <>
+              <div className="flex-grow overflow-y-auto px-2 pt-2 border-t border-white/20 min-h-0">
+                {historyTabs.length > 0 ? (
+                  historyTabs.map((tabState, index) => (
+                    <TabHistory
+                      key={tabState.tabId}
+                      tabState={tabState}
+                      onNavigate={onNavigate}
+                      isFirst={index === 0}
+                    />
+                  ))
+                ) : (
+                  <p className="text-xs text-gray-400 text-center py-2">
+                    No completed runs in this session.
+                  </p>
+                )}
+              </div>
+              {historyTabs.length > 0 ? (
+                <div className="flex-shrink-0 text-xs text-gray-400 px-3 py-1.5 border-t border-white/20 flex justify-between">
+                  <span>
+                    Total Runs:{' '}
+                    <span className="font-medium text-gray-300">{totalRuns}</span>
+                  </span>
+                  <span>
+                    Avg:{' '}
+                    <span className="font-mono font-medium text-gray-300">
+                      {formatElapsedTime(avgDuration)}
+                    </span>
+                  </span>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      );
+    }
+
+    export default Indicator;
+approved: true

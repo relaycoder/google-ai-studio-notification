@@ -1,4 +1,4 @@
-import type { Status } from './types';
+import type { Status } from '../types';
 
 export const statusConfig: Record<
   Status,

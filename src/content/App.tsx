@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Indicator from './Indicator';
-import type { Status } from './types';
+import type { GlobalState } from '../types';
 
 /**
  * Captures the current tab's title to use as the run name.
@@ -24,190 +24,152 @@ function captureRunContext(): string | null {
 }
 
 function App() {
-  const [status, setStatus] = useState<Status>('monitoring');
-  const [error, setError] = useState<string | null>(null);
-  const [runName, setRunName] = useState<string | null>(null);
-  const startTimeRef = useRef<number | null>(null);
-  const [elapsedTime, setElapsedTime] = useState(0);
-  const pausedTimeRef = useRef(0);
-  const pauseStartRef = useRef<number | null>(null);
-  const prePauseStatusRef = useRef<Status>('monitoring');
+  const [tabId, setTabId] = useState<number | null>(null);
+  const [globalState, setGlobalState] = useState<GlobalState>({});
+  const lastKnownStopButtonState = useRef<boolean>(false);
+  const portRef = useRef<chrome.runtime.Port | null>(null);
 
-  useEffect(() => {
-    let intervalId: number | undefined;
-
-    if (status === 'running') {
-      intervalId = window.setInterval(() => {
-        if (startTimeRef.current) {
-          const now = Date.now();
-          const totalElapsed =
-            now - startTimeRef.current - pausedTimeRef.current;
-          setElapsedTime(totalElapsed);
-        }
-      }, 1000);
+  // This function will be responsible for ensuring a connection exists.
+  const ensureConnection = useCallback(() => {
+    if (portRef.current) {
+      return;
     }
 
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
-  }, [status]);
+    try {
+      portRef.current = chrome.runtime.connect({ name: 'content-script' });
 
-  const handlePauseResume = useCallback(() => {
-    setStatus((currentStatus) => {
-      if (currentStatus === 'running' || currentStatus === 'monitoring') {
-        // Pausing
-        prePauseStatusRef.current = currentStatus; // Store where we came from
+      // Handle disconnection
+      portRef.current.onDisconnect.addListener(() => {
+        portRef.current = null;
+        console.log(
+          'AI Studio Notifier: Port disconnected. It will be reconnected on the next action.'
+        );
+      });
 
-        if (currentStatus === 'running') {
-          pauseStartRef.current = Date.now();
-          // Update elapsed time one last time before pausing interval
-          if (startTimeRef.current) {
-            setElapsedTime(
-              Date.now() - startTimeRef.current - pausedTimeRef.current
-            );
-          }
+      // Handle incoming messages
+      portRef.current.onMessage.addListener((message: any) => {
+        if (message.type === 'init') {
+          setTabId(message.tabId);
+          setGlobalState(message.state);
+        } else if (message.type === 'stateUpdate') {
+          setGlobalState(message.state);
         }
-        return 'paused';
-      }
-
-      if (currentStatus === 'paused') {
-        // Resuming
-        const resumeTo = prePauseStatusRef.current;
-        if (resumeTo === 'running') {
-          if (pauseStartRef.current) {
-            pausedTimeRef.current += Date.now() - pauseStartRef.current;
-            pauseStartRef.current = null;
-          }
-        }
-        // Resume to the state we were in before pausing
-        return resumeTo;
-      }
-
-      return currentStatus;
-    });
+      });
+    } catch (e) {
+      console.error(
+        'AI Studio Notifier: Connection to background script failed:',
+        e
+      );
+      portRef.current = null; // Ensure it's null on failure
+    }
   }, []);
 
+  useEffect(() => {
+    ensureConnection();
+
+    return () => {
+      if (portRef.current) {
+        portRef.current.disconnect();
+        portRef.current = null;
+      }
+    };
+  }, [ensureConnection]);
+
+  const postMessage = useCallback(
+    (message: any) => {
+      // Ensure connection exists before posting a message.
+      ensureConnection();
+
+      if (!portRef.current) {
+        console.error(
+          'AI Studio Notifier: Cannot post message, port is not connected.'
+        );
+        return;
+      }
+
+      try {
+        portRef.current.postMessage(message);
+      } catch (e) {
+        console.warn(
+          'AI Studio Notifier: Could not post message. The port may have been disconnected just now.',
+          e
+        );
+      }
+    },
+    [ensureConnection]
+  );
+
   const checkState = useCallback(() => {
+    if (!tabId) return;
+    const currentTabState = globalState[tabId];
+    if (!currentTabState || currentTabState.status === 'paused') {
+      return;
+    }
+
     try {
       const stopButtonExists = !!document.querySelector<SVGRectElement>(
         'rect[class*="stoppable-stop"]'
       );
-
-      // Don't do anything if paused. The pause/resume button is the only source of truth.
-      if (status === 'paused') {
-        return;
-      }
-
-      const wasRunning = status === 'running';
-
-      // --- Transition: running -> stopped ---
-      if (wasRunning && !stopButtonExists) {
-        const endTime = Date.now();
-        const finalElapsedTime = startTimeRef.current
-          ? endTime - startTimeRef.current - pausedTimeRef.current
-          : 0;
-        setElapsedTime(finalElapsedTime < 0 ? 0 : finalElapsedTime);
-
-        if (finalElapsedTime >= 3000) {
-          console.log(
-            `AI Studio process finished. Sending desktop notification for run: "${runName}".`
-          );
-          chrome.runtime.sendMessage({
-            type: 'processFinished',
-            durationMs: finalElapsedTime,
-            runName: runName,
-          });
+      if (stopButtonExists !== lastKnownStopButtonState.current) {
+        lastKnownStopButtonState.current = stopButtonExists;
+        if (stopButtonExists) {
+          postMessage({ type: 'startRun', runName: captureRunContext() });
         } else {
-          console.log(
-            'AI Studio process finished in under 3 seconds. Skipping desktop notification.'
-          );
+          postMessage({ type: 'stopRun' });
         }
-
-        startTimeRef.current = null;
-        pausedTimeRef.current = 0;
-        pauseStartRef.current = null;
-        setStatus('stopped');
-        return; // End execution for this check
       }
-
-      const newStatus = stopButtonExists ? 'running' : 'monitoring';
-
-      // No state change, do nothing.
-      if (newStatus === status) {
-        return;
-      }
-
-      // --- Transition: stopped -> monitoring ---
-      // This happens when the user clears the output. We want to stay in the 'stopped'
-      // state visually until a new run is explicitly started.
-      if (status === 'stopped' && newStatus === 'monitoring') {
-        // We reset the run name here so the indicator clears.
-        if (runName) setRunName(null);
-        return;
-      }
-
-      // --- Transition: (monitoring | stopped) -> running ---
-      if (newStatus === 'running') {
-        // This covers transitions from 'monitoring' or 'stopped' to 'running'
-        console.log('AI Studio Notifier: State changed to Running');
-        startTimeRef.current = Date.now();
-        pausedTimeRef.current = 0;
-        pauseStartRef.current = null;
-        setElapsedTime(0);
-        setRunName(captureRunContext());
-        setStatus('running');
-        setError(null);
-        return;
-      }
-
-      // --- Any other transition (e.g., running -> monitoring, which shouldn't happen) ---
-      console.log(`AI Studio Notifier: State changed to ${newStatus}`);
-      setStatus(newStatus);
-      setError(null);
     } catch (e) {
       console.error('AI Studio Notifier: Error during state check.', e);
-      setError('An error occurred during check.');
-      setStatus('error');
+      postMessage({ type: 'error', error: 'An error occurred during check.' });
     }
-  }, [status, runName]);
+  }, [globalState, tabId, postMessage]);
 
   useEffect(() => {
-    // When paused, the observer should not be active to save resources.
-    if (status === 'paused') {
-      // The cleanup function of the previous effect run has already disconnected
-      // the observer. We don't set up a new one while paused.
+    if (!tabId) return;
+    const currentTabState = globalState[tabId];
+    if (currentTabState?.status === 'paused') {
       return;
     }
 
-    // Initial Check after a short delay
-    const timeoutId = setTimeout(checkState, 2000);
-
-    // Observer Setup
+    const timeoutId = setTimeout(checkState, 1000);
     const observer = new MutationObserver(checkState);
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-    });
-    console.log(
-      'AI Studio Notifier: MutationObserver is now watching the page.'
-    );
+    observer.observe(document.body, { childList: true, subtree: true });
 
     return () => {
       clearTimeout(timeoutId);
       observer.disconnect();
-      console.log('AI Studio Notifier: MutationObserver disconnected.');
     };
-  }, [checkState, status]);
+  }, [checkState, tabId, globalState]);
+
+  const handlePauseResume = useCallback(
+    () => postMessage({ type: 'pauseResume' }),
+    [postMessage]
+  );
+  const handleClose = useCallback(
+    () => postMessage({ type: 'closeIndicator' }),
+    [postMessage]
+  );
+  const handleNavigate = useCallback(
+    (navTabId: number, windowId: number) => {
+      postMessage({ type: 'navigateToTab', tabId: navTabId, windowId });
+    },
+    [postMessage]
+  );
+
+  if (!tabId || !globalState[tabId]?.isVisible) {
+    return null;
+  }
+
+  const currentTabState = globalState[tabId];
+  if (!currentTabState) return null; // Should not happen if tabId is set
 
   return (
     <Indicator
-      status={status}
-      error={error}
-      elapsedTime={elapsedTime}
+      currentTabState={currentTabState}
+      allTabsState={globalState}
       onPauseResume={handlePauseResume}
-      runName={runName}
+      onClose={handleClose}
+      onNavigate={handleNavigate}
     />
   );
 }

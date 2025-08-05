@@ -1,0 +1,294 @@
+uuid: 44265cc8-1c4b-4c54-b59a-14d232a517b6
+projectId: google-ai-studio-notification
+createdAt: '2025-08-05T14:48:36.689Z'
+linesAdded: 62
+linesRemoved: 21
+gitCommitMsg: 'fix(content): make message port connection to background resilient'
+promptSummary: >-
+  Fix 'port disconnected' error in the content script by making the connection
+  to the background script resilient to service worker termination.
+reasoning:
+  - >-
+    Based on the error you're encountering, `Could not post message, port may be
+    disconnected`, the issue lies in the communication between the content
+    script (`src/content/App.tsx`) and the background service worker
+    (`src/background.ts`).
+  - >-
+    In a Manifest V3 extension, the background service worker can be terminated
+    by Chrome after a period of inactivity to conserve resources. When this
+    happens, any long-lived message ports from content scripts become
+    disconnected. Your current code establishes the port connection once when
+    the `App` component mounts and doesn't handle this type of disconnection,
+    leading to the error when it later tries to send a message through the dead
+    port.
+  - >-
+    To fix this, I will refactor the connection logic in `src/content/App.tsx`
+    to be more resilient. Here's the plan:
+  - >-
+    1.  **Create a lazy, on-demand connection function (`ensureConnection`)**:
+    Instead of connecting only once, we'll have a function that establishes a
+    connection if one doesn't already exist.
+  - >-
+    2.  **Add `onDisconnect` listener**: When a port is connected, I will add a
+    listener for its `onDisconnect` event. This allows the content script to
+    know immediately when the background service worker has been terminated, so
+    it can clean up the dead port reference.
+  - >-
+    3.  **Update `postMessage`**: The `postMessage` function will now call
+    `ensureConnection` before attempting to send a message, automatically
+    re-establishing a connection if the previous one was lost.
+  - >-
+    This change makes the communication robust enough to handle the lifecycle of
+    the background service worker.
+  - '### Refactor Content Script Port Management'
+  - >-
+    I'll modify `src/content/App.tsx` to implement the resilient port connection
+    logic.
+operations:
+  - type: write
+    path: src/content/App.tsx
+    content: |-
+      <<<<<<< SEARCH
+        const portRef = useRef<chrome.runtime.Port | null>(null);
+
+        useEffect(() => {
+          portRef.current = chrome.runtime.connect({ name: 'content-script' });
+
+          portRef.current.onMessage.addListener((message: any) => {
+            if (message.type === 'init') {
+              setTabId(message.tabId);
+              setGlobalState(message.state);
+            } else if (message.type === 'stateUpdate') {
+              setGlobalState(message.state);
+            }
+          });
+
+          const port = portRef.current;
+          return () => {
+            port.disconnect();
+            portRef.current = null;
+          };
+        }, []);
+
+        const postMessage = useCallback((message: any) => {
+          try {
+            if (portRef.current) {
+              portRef.current.postMessage(message);
+            }
+          } catch (e) {
+            console.warn('Could not post message, port may be disconnected.', e);
+          }
+        }, []);
+      =======
+        const portRef = useRef<chrome.runtime.Port | null>(null);
+
+        // This function will be responsible for ensuring a connection exists.
+        const ensureConnection = useCallback(() => {
+          if (portRef.current) {
+            return;
+          }
+
+          try {
+            portRef.current = chrome.runtime.connect({ name: 'content-script' });
+
+            // Handle disconnection
+            portRef.current.onDisconnect.addListener(() => {
+              portRef.current = null;
+              console.log(
+                'AI Studio Notifier: Port disconnected. It will be reconnected on the next action.'
+              );
+            });
+
+            // Handle incoming messages
+            portRef.current.onMessage.addListener((message: any) => {
+              if (message.type === 'init') {
+                setTabId(message.tabId);
+                setGlobalState(message.state);
+              } else if (message.type === 'stateUpdate') {
+                setGlobalState(message.state);
+              }
+            });
+          } catch (e) {
+            console.error(
+              'AI Studio Notifier: Connection to background script failed:',
+              e
+            );
+            portRef.current = null; // Ensure it's null on failure
+          }
+        }, []);
+
+        useEffect(() => {
+          ensureConnection();
+
+          return () => {
+            if (portRef.current) {
+              portRef.current.disconnect();
+              portRef.current = null;
+            }
+          };
+        }, [ensureConnection]);
+
+        const postMessage = useCallback(
+          (message: any) => {
+            // Ensure connection exists before posting a message.
+            ensureConnection();
+
+            if (!portRef.current) {
+              console.error(
+                'AI Studio Notifier: Cannot post message, port is not connected.'
+              );
+              return;
+            }
+
+            try {
+              portRef.current.postMessage(message);
+            } catch (e) {
+              console.warn(
+                'AI Studio Notifier: Could not post message. The port may have been disconnected just now.',
+                e
+              );
+            }
+          },
+          [ensureConnection]
+        );
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+snapshot:
+  src/content/App.tsx: |-
+    import { useState, useEffect, useCallback, useRef } from 'react';
+    import Indicator from './Indicator';
+    import type { GlobalState } from '../types';
+
+    /**
+     * Captures the current tab's title to use as the run name.
+     * This makes notifications more informative.
+     * @returns The tab's title, or null if it's empty.
+     */
+    function captureRunContext(): string | null {
+      try {
+        const title = document.title?.trim();
+        if (title) {
+          // Clean up the title, e.g., remove " - Google AI Studio"
+          return title.replace(/ - Google AI Studio$/, '').trim();
+        }
+      } catch (e) {
+        console.error(
+          'AI Studio Notifier: Error capturing run context from tab title.',
+          e
+        );
+      }
+      return null;
+    }
+
+    function App() {
+      const [tabId, setTabId] = useState<number | null>(null);
+      const [globalState, setGlobalState] = useState<GlobalState>({});
+      const lastKnownStopButtonState = useRef<boolean>(false);
+      const portRef = useRef<chrome.runtime.Port | null>(null);
+
+      useEffect(() => {
+        portRef.current = chrome.runtime.connect({ name: 'content-script' });
+
+        portRef.current.onMessage.addListener((message: any) => {
+          if (message.type === 'init') {
+            setTabId(message.tabId);
+            setGlobalState(message.state);
+          } else if (message.type === 'stateUpdate') {
+            setGlobalState(message.state);
+          }
+        });
+
+        const port = portRef.current;
+        return () => {
+          port.disconnect();
+          portRef.current = null;
+        };
+      }, []);
+
+      const postMessage = useCallback((message: any) => {
+        try {
+          if (portRef.current) {
+            portRef.current.postMessage(message);
+          }
+        } catch (e) {
+          console.warn('Could not post message, port may be disconnected.', e);
+        }
+      }, []);
+
+      const checkState = useCallback(() => {
+        if (!tabId) return;
+        const currentTabState = globalState[tabId];
+        if (!currentTabState || currentTabState.status === 'paused') {
+          return;
+        }
+
+        try {
+          const stopButtonExists = !!document.querySelector<SVGRectElement>(
+            'rect[class*="stoppable-stop"]'
+          );
+          if (stopButtonExists !== lastKnownStopButtonState.current) {
+            lastKnownStopButtonState.current = stopButtonExists;
+            if (stopButtonExists) {
+              postMessage({ type: 'startRun', runName: captureRunContext() });
+            } else {
+              postMessage({ type: 'stopRun' });
+            }
+          }
+        } catch (e) {
+          console.error('AI Studio Notifier: Error during state check.', e);
+          postMessage({ type: 'error', error: 'An error occurred during check.' });
+        }
+      }, [globalState, tabId, postMessage]);
+
+      useEffect(() => {
+        if (!tabId) return;
+        const currentTabState = globalState[tabId];
+        if (currentTabState?.status === 'paused') {
+          return;
+        }
+
+        const timeoutId = setTimeout(checkState, 1000);
+        const observer = new MutationObserver(checkState);
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        return () => {
+          clearTimeout(timeoutId);
+          observer.disconnect();
+        };
+      }, [checkState, tabId, globalState]);
+
+      const handlePauseResume = useCallback(
+        () => postMessage({ type: 'pauseResume' }),
+        [postMessage]
+      );
+      const handleClose = useCallback(
+        () => postMessage({ type: 'closeIndicator' }),
+        [postMessage]
+      );
+      const handleNavigate = useCallback(
+        (navTabId: number, windowId: number) => {
+          postMessage({ type: 'navigateToTab', tabId: navTabId, windowId });
+        },
+        [postMessage]
+      );
+
+      if (!tabId || !globalState[tabId]?.isVisible) {
+        return null;
+      }
+
+      const currentTabState = globalState[tabId];
+      if (!currentTabState) return null; // Should not happen if tabId is set
+
+      return (
+        <Indicator
+          currentTabState={currentTabState}
+          allTabsState={globalState}
+          onPauseResume={handlePauseResume}
+          onClose={handleClose}
+          onNavigate={handleNavigate}
+        />
+      );
+    }
+
+    export default App;
+approved: true

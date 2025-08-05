@@ -1,0 +1,1343 @@
+uuid: 4a2754d9-d04b-4b20-91a5-e1fc64b4c489
+projectId: google-ai-studio-notification
+createdAt: '2025-08-05T14:34:57.192Z'
+linesAdded: 132
+linesRemoved: 102
+gitCommitMsg: 'refactor: DRY up background script and useMovable hook, fix monitoring'
+promptSummary: >-
+  The user wants to refactor the codebase to be more DRY (Don't Repeat
+  Yourself), reduce lines of code, and fix bugs related to monitoring and
+  disconnected ports.
+reasoning:
+  - >-
+    Hello! I'm anton, your expert AI programmer. I've analyzed your request to
+    make the codebase "radically DRY", reduce lines of code, and fix a couple of
+    bugs related to monitoring and port disconnection errors.
+  - 'Here is my plan to improve your extension:'
+  - >-
+    1.  **Fix Monitoring Bug**: I'll address the issue where monitoring doesn't
+    reliably restart after a process finishes. My solution involves
+    automatically transitioning the indicator from the "Process Finished!" state
+    back to "Monitoring" after a 5-second delay. This provides clear user
+    feedback and ensures the extension is ready to detect the next run.
+  - >-
+    2.  **Prevent Timer Resets**: I'll fix a race condition where a page reload
+    could cause the content script to incorrectly send a `startRun` message for
+    an already running process, which would reset its timer. A simple guard in
+    the background script will prevent this.
+  - >-
+    3.  **Refactor `useMovable.ts`**: To make the component dragging and
+    resizing logic DRY, I'll extract the common mouse event handling (setting up
+    `mousemove` and `mouseup` listeners, and cleaning them up) into a shared
+    helper function. This cleans up the main `handleMouseDown` logic.
+  - >-
+    4.  **Refactor `background.ts`**: This file contains a lot of repeated logic
+    for state management (`getState`, modify, `setState`). I'll introduce a new
+    `updateTabState` helper function to encapsulate this pattern. This will
+    significantly reduce boilerplate and LoC in all message handlers, making the
+    code much cleaner and easier to maintain.
+  - Let's get to the modifications.
+  - '### Step 1: Refactor `useMovable.ts` for DRYer Interaction Handling'
+  - >-
+    I'll start by refactoring `useMovable.ts`. I'm introducing a helper
+    function, `initDragInteraction`, to abstract away the common logic of
+    handling mouse move and mouse up events for both dragging and resizing. This
+    reduces code duplication within the `handleMouseDown` callback.
+  - '### Step 2: Refactor and Fix `background.ts`'
+  - >-
+    Now for the main event. I'm applying the new `updateTabState` pattern to
+    `background.ts` to dramatically simplify the message handlers. This patch
+    also includes the fixes for the monitoring and timer reset bugs.
+  - >-
+    These changes should resolve the reported issues and make your codebase
+    significantly more robust and maintainable. Let me know if you have any
+    other questions!
+operations:
+  - type: write
+    path: src/content/useMovable.ts
+    content: >-
+      --- src/content/useMovable.ts
+
+      +++ src/content/useMovable.ts
+
+      @@ -11,6 +11,22 @@
+       type Edges = { top: boolean; right: boolean; bottom: boolean; left: boolean };
+       
+       const EDGE_SENSITIVITY = 8; // px
+      +
+
+      +function initDragInteraction(
+
+      +  onMove: (e: MouseEvent) => void,
+
+      +  onEnd: (didMove: boolean) => void
+
+      +) {
+
+      +  let didInteract = false;
+
+      +  const handleMouseMove = (moveEvent: MouseEvent) => {
+
+      +    didInteract = true;
+
+      +    onMove(moveEvent);
+
+      +  };
+
+      +  const handleMouseUp = () => {
+
+      +    document.removeEventListener('mousemove', handleMouseMove);
+
+      +    document.removeEventListener('mouseup', handleMouseUp);
+
+      +    onEnd(didInteract);
+
+      +  };
+
+      +  document.addEventListener('mousemove', handleMouseMove);
+
+      +  document.addEventListener('mouseup', handleMouseUp);
+
+      +}
+       
+       export function useMovable(
+         ref: RefObject<HTMLElement>,
+      @@ -87,70 +103,67 @@
+             if (isResizing && edges) {
+               e.preventDefault();
+               e.stopPropagation();
+      +
+               const startMousePos = { x: e.clientX, y: e.clientY };
+               const { position: startElementPos, size: startElementSize } =
+                 stateRef.current;
+      -        let didInteract = false;
+       
+               const handleMouseMoveResize = (moveEvent: MouseEvent) => {
+      -          didInteract = true;
+                 const dx = moveEvent.clientX - startMousePos.x;
+                 const dy = moveEvent.clientY - startMousePos.y;
+       
+                 let newWidth = startElementSize.width;
+                 let newHeight = startElementSize.height;
+                 let newX = startElementPos.x;
+                 let newY = startElementPos.y;
+       
+      -          if (edges.right)
+
+      +          if (edges.right) {
+                   newWidth = Math.max(minSize.width, startElementSize.width + dx);
+      +          }
+                 if (edges.left) {
+                   const proposedWidth = startElementSize.width - dx;
+                   if (proposedWidth >= minSize.width) {
+                     newWidth = proposedWidth;
+                     newX = startElementPos.x + dx;
+                   }
+                 }
+      -          if (edges.bottom)
+
+      +          if (edges.bottom) {
+                   newHeight = Math.max(minSize.height, startElementSize.height + dy);
+      +          }
+                 if (edges.top) {
+                   const proposedHeight = startElementSize.height - dy;
+                   if (proposedHeight >= minSize.height) {
+                     newHeight = proposedHeight;
+                     newY = startElementPos.y + dy;
+                   }
+                 }
+       
+                 setPosition({ x: newX, y: newY });
+                 setSize({ width: newWidth, height: newHeight });
+               };
+       
+      -        const handleMouseUpResize = () => {
+
+      -          document.removeEventListener('mousemove',
+      handleMouseMoveResize);
+
+      -          document.removeEventListener('mouseup', handleMouseUpResize);
+
+      -          if (didInteract) {
+
+      +        initDragInteraction(handleMouseMoveResize, (didMove) => {
+
+      +          if (didMove) {
+                   chrome.storage.local.set({
+                     [POSITION_STORAGE_KEY]: stateRef.current.position,
+                     [SIZE_STORAGE_KEY]: stateRef.current.size,
+                   });
+                 }
+      -        };
+
+      -
+
+      -        document.addEventListener('mousemove', handleMouseMoveResize);
+
+      -        document.addEventListener('mouseup', handleMouseUpResize);
+
+      +        });
+             } else if (isDragHandle) {
+               e.preventDefault();
+               const startMousePos = { x: e.clientX, y: e.clientY };
+               const { position: startElementPos } = stateRef.current;
+      -        let didInteract = false;
+       
+               const handleMouseMoveDrag = (moveEvent: MouseEvent) => {
+      -          didInteract = true;
+                 const dx = moveEvent.clientX - startMousePos.x;
+                 const dy = moveEvent.clientY - startMousePos.y;
+                 setPosition({
+                   x: startElementPos.x + dx,
+                   y: startElementPos.y + dy,
+                 });
+               };
+       
+      -        const handleMouseUpDrag = () => {
+
+      -          document.removeEventListener('mousemove', handleMouseMoveDrag);
+
+      -          document.removeEventListener('mouseup', handleMouseUpDrag);
+
+      -          if (didInteract) {
+
+      +        initDragInteraction(handleMouseMoveDrag, (didMove) => {
+
+      +          if (didMove) {
+                   chrome.storage.local.set({
+                     [POSITION_STORAGE_KEY]: stateRef.current.position,
+                   });
+      @@ -158,10 +171,7 @@
+                   onDragHandleClick();
+                 }
+      -        };
+
+      -
+
+      -        document.addEventListener('mousemove', handleMouseMoveDrag);
+
+      -        document.addEventListener('mouseup', handleMouseUpDrag);
+
+      +        });
+             }
+           },
+           [
+    patchStrategy: new-unified
+  - type: write
+    path: src/background.ts
+    content: >-
+      --- src/background.ts
+
+      +++ src/background.ts
+
+      @@ -25,6 +25,20 @@
+         }
+       }
+       
+      +async function updateTabState<T>(
+
+      +  tabId: number,
+
+      +  updater: (tab: TabState) => T
+
+      +): Promise<T | undefined> {
+
+      +  const currentState = await getState();
+
+      +  const tab = currentState[tabId];
+
+      +  if (!tab) return undefined;
+
+      +
+
+      +  const result = updater(tab);
+
+      +  await setState(currentState);
+
+      +  return result;
+
+      +}
+
+      +
+       function getInitialTabState(tabId: number, windowId: number): TabState {
+         return {
+           tabId,
+      @@ -83,27 +97,21 @@
+       
+         port.onMessage.addListener(async (message: Message) => {
+           switch (message.type) {
+             case 'startRun':
+      -        await handleStartRun(tabId, message.runName);
+
+      +        handleStartRun(tabId, message.runName);
+               break;
+             case 'stopRun':
+      -        await handleStopRun(tabId, message.isError, message.error);
+
+      +        handleStopRun(tabId, message.isError, message.error);
+               break;
+             case 'pauseResume':
+      -        await handlePauseResume(tabId);
+
+      +        handlePauseResume(tabId);
+               break;
+             case 'closeIndicator':
+      -        await handleCloseIndicator(tabId);
+
+      +        handleCloseIndicator(tabId);
+               break;
+             case 'navigateToTab':
+               handleNavigateToTab(message.tabId, message.windowId);
+               break;
+             case 'error':
+      -        const currentState = await getState();
+
+      -        const tab = currentState[tabId];
+
+      -        if (tab) {
+
+      -          tab.status = 'error';
+
+      -          tab.error = message.error;
+
+      -          await setState(currentState);
+
+      -        }
+
+      +        updateTabState(tabId, (tab) => {
+
+      +          tab.status = 'error';
+
+      +          tab.error = message.error;
+
+      +        });
+               break;
+           }
+         });
+      @@ -127,96 +135,108 @@
+       });
+       
+       
+       async function handleStartRun(tabId: number, runName: string | null) {
+      -  const currentState = await getState();
+
+      -  const tab = currentState[tabId];
+
+      -  if (!tab) return;
+
+      -
+
+      -  tab.status = 'running';
+
+      -  tab.startTime = Date.now();
+
+      -  tab.runName = runName;
+
+      -  tab.elapsedTime = 0;
+
+      -  tab.pausedTime = 0;
+
+      -  tab.pauseStartTime = null;
+
+      -  tab.error = null;
+
+      -
+
+      -  await setState(currentState);
+
+      -  ensureTimerIsRunning();
+
+      +  await updateTabState(tabId, (tab) => {
+
+      +    // Prevent resetting a run that the content script thinks has started
+      again
+
+      +    // on page load.
+
+      +    if (tab.status === 'running') return;
+
+      +
+
+      +    tab.status = 'running';
+
+      +    tab.startTime = Date.now();
+
+      +    tab.runName = runName;
+
+      +    tab.elapsedTime = 0;
+
+      +    tab.pausedTime = 0;
+
+      +    tab.pauseStartTime = null;
+
+      +    tab.error = null;
+
+      +
+
+      +    ensureTimerIsRunning();
+
+      +  });
+       }
+       
+       async function handleStopRun(
+         tabId: number,
+         isError = false,
+         error?: string
+       ) {
+      -  const currentState = await getState();
+
+      -  const tab = currentState[tabId];
+
+      -  if (!tab || tab.status === 'monitoring' || tab.status === 'stopped')
+      return;
+
+      -
+
+      -  const endTime = Date.now();
+
+      -  const finalElapsedTime = tab.startTime
+
+      -    ? endTime - tab.startTime - tab.pausedTime
+
+      -    : 0;
+
+      -
+
+      -  const finalStatus = isError ? 'error' : 'stopped';
+
+      -
+
+      -  const historyEntry: RunHistoryEntry = {
+
+      -    id: `${tabId}-${endTime}`,
+
+      -    runName: tab.runName,
+
+      -    durationMs: finalElapsedTime,
+
+      -    status: finalStatus,
+
+      -    endTime: endTime,
+
+      -  };
+
+      -  tab.history.unshift(historyEntry);
+
+      -  if (tab.history.length > 20) {
+
+      -    tab.history.pop();
+
+      -  }
+
+      -
+
+      -  tab.status = 'stopped';
+
+      -  tab.startTime = null;
+
+      -  tab.runName = null;
+
+      -  tab.elapsedTime = finalElapsedTime;
+
+      -  tab.error = error || null;
+
+      -
+
+      -  await setState(currentState);
+
+      -
+
+      -  if (finalElapsedTime >= 3000) {
+
+      -    console.log(
+
+      -      `AI Studio process finished. Sending notification for run:
+      "${historyEntry.runName}".`
+
+      -    );
+
+      -    createNotification({
+
+      -      tabId: tab.tabId,
+
+      -      windowId: tab.windowId,
+
+      -      durationMs: finalElapsedTime,
+
+      -      runName: historyEntry.runName,
+
+      -    });
+
+      +  const notificationContext = await updateTabState(tabId, (tab) => {
+
+      +    if (tab.status === 'monitoring' || tab.status === 'stopped') return
+      null;
+
+      +
+
+      +    const endTime = Date.now();
+
+      +    const finalElapsedTime = tab.startTime
+
+      +      ? endTime - tab.startTime - tab.pausedTime
+
+      +      : 0;
+
+      +    const finalStatus = isError ? 'error' : 'stopped';
+
+      +
+
+      +    const historyEntry: RunHistoryEntry = {
+
+      +      id: `${tabId}-${endTime}`,
+
+      +      runName: tab.runName,
+
+      +      durationMs: finalElapsedTime,
+
+      +      status: finalStatus,
+
+      +      endTime: endTime,
+
+      +    };
+
+      +    tab.history.unshift(historyEntry);
+
+      +    if (tab.history.length > 20) {
+
+      +      tab.history.pop();
+
+      +    }
+
+      +
+
+      +    tab.status = 'stopped';
+
+      +    tab.startTime = null;
+
+      +    // tab.runName is preserved for the "stopped" message
+
+      +    tab.elapsedTime = finalElapsedTime;
+
+      +    tab.error = error || null;
+
+      +
+
+      +    // After 5s, reset to monitoring to make it clear we're ready for the
+      next run.
+
+      +    if (!isError) {
+
+      +      setTimeout(async () => {
+
+      +        const freshState = await getState();
+
+      +        const freshTab = freshState[tabId];
+
+      +        // Make sure we don't reset if a new run has already started.
+
+      +        if (
+
+      +          freshTab &&
+
+      +          freshTab.status === 'stopped' &&
+
+      +          freshTab.history[0]?.id === historyEntry.id
+
+      +        ) {
+
+      +          freshTab.status = 'monitoring';
+
+      +          freshTab.runName = null;
+
+      +          freshTab.elapsedTime = 0;
+
+      +          freshTab.error = null;
+
+      +          await setState(freshState);
+
+      +        }
+
+      +      }, 5000);
+
+      +    }
+
+      +
+
+      +    if (finalElapsedTime >= 3000) {
+
+      +      return {
+
+      +        tabId: tab.tabId,
+
+      +        windowId: tab.windowId,
+
+      +        durationMs: finalElapsedTime,
+
+      +        runName: historyEntry.runName,
+
+      +      };
+
+      +    }
+
+      +    return null;
+
+      +  });
+
+      +
+
+      +  if (notificationContext) {
+
+      +    createNotification(notificationContext);
+         }
+       }
+       
+       async function handlePauseResume(tabId: number) {
+      -  const currentState = await getState();
+
+      -  const tab = currentState[tabId];
+
+      -  if (!tab) return;
+
+      -
+
+      -  if (tab.status === 'running') {
+
+      -    tab.pauseStartTime = Date.now();
+
+      -    tab.status = 'paused';
+
+      -    // Update elapsed time one last time before pausing interval
+
+      -    if (tab.startTime) {
+
+      +  await updateTabState(tabId, (tab) => {
+
+      +    if (tab.status === 'running') {
+
+      +      tab.pauseStartTime = Date.now();
+
+      +      tab.status = 'paused';
+
+      +      // Update elapsed time one last time before pausing interval
+
+      +      if (tab.startTime) {
+               tab.elapsedTime = Date.now() - tab.startTime - tab.pausedTime;
+      +      }
+
+      +    } else if (tab.status === 'paused') {
+
+      +      if (tab.pauseStartTime) {
+
+      +        tab.pausedTime += Date.now() - tab.pauseStartTime;
+
+      +      }
+
+      +      tab.pauseStartTime = null;
+
+      +      tab.status = 'running';
+
+      +      ensureTimerIsRunning();
+           }
+      -
+
+      -  } else if (tab.status === 'paused') {
+
+      -    if (tab.pauseStartTime) {
+
+      -      tab.pausedTime += Date.now() - tab.pauseStartTime;
+
+      -    }
+
+      -    tab.pauseStartTime = null;
+
+      -    tab.status = 'running';
+
+      -    ensureTimerIsRunning();
+
+      -  }
+
+      -  await setState(currentState);
+
+      +  });
+       }
+       
+       async function handleCloseIndicator(tabId: number) {
+      -  const currentState = await getState();
+
+      -  const tab = currentState[tabId];
+
+      -  if (tab) {
+
+      -    tab.isVisible = false;
+
+      -    await setState(currentState);
+
+      -  }
+
+      +  updateTabState(tabId, (tab) => {
+
+      +    tab.isVisible = false;
+
+      +  });
+       }
+       
+       function handleNavigateToTab(tabId: number, windowId: number) {
+    patchStrategy: new-unified
+snapshot:
+  src/content/useMovable.ts: >-
+    import { useState, useCallback, RefObject, useEffect, useRef } from 'react';
+
+
+    const POSITION_STORAGE_KEY = 'indicator-position';
+
+    const SIZE_STORAGE_KEY = 'indicator-size';
+
+
+    interface Position {
+      x: number;
+      y: number;
+    }
+
+    interface Size {
+      width: number;
+      height: number;
+    }
+
+    type Edges = { top: boolean; right: boolean; bottom: boolean; left: boolean
+    };
+
+
+    const EDGE_SENSITIVITY = 8; // px
+
+
+    export function useMovable(
+      ref: RefObject<HTMLElement>,
+      options: {
+        onDragHandleClick?: () => void;
+        isResizable?: boolean;
+        initialSize?: Size;
+        minSize?: Size;
+        dragHandleClassName?: string;
+      }
+    ) {
+      const {
+        onDragHandleClick,
+        isResizable = false,
+        initialSize = { width: 256, height: 300 },
+        minSize = { width: 220, height: 150 },
+        dragHandleClassName,
+      } = options;
+
+      const [position, setPosition] = useState<Position>({
+        x: window.innerWidth - (initialSize.width + 20),
+        y: 20,
+      });
+      const [size, setSize] = useState<Size>(initialSize);
+
+      const stateRef = useRef({ position, size });
+
+      useEffect(() => {
+        chrome.storage.local.get(
+          [POSITION_STORAGE_KEY, SIZE_STORAGE_KEY],
+          (result) => {
+            const storedPosition = result[POSITION_STORAGE_KEY];
+            if (
+              storedPosition &&
+              typeof storedPosition.x === 'number' &&
+              typeof storedPosition.y === 'number'
+            ) {
+              setPosition(storedPosition);
+            }
+            const storedSize = result[SIZE_STORAGE_KEY];
+            if (
+              isResizable &&
+              storedSize &&
+              typeof storedSize.width === 'number' &&
+              typeof storedSize.height === 'number'
+            ) {
+              setSize(storedSize);
+            }
+          }
+        );
+      }, [isResizable]);
+
+      useEffect(() => {
+        stateRef.current = { position, size };
+      }, [position, size]);
+
+      const getResizeEdges = (
+        e: React.MouseEvent<HTMLDivElement>,
+        element: HTMLElement
+      ): Edges | null => {
+        if (!isResizable) return null;
+        const rect = element.getBoundingClientRect();
+        return {
+          top: e.clientY < rect.top + EDGE_SENSITIVITY,
+          bottom: e.clientY > rect.bottom - EDGE_SENSITIVITY,
+          left: e.clientX < rect.left + EDGE_SENSITIVITY,
+          right: e.clientX > rect.right - EDGE_SENSITIVITY,
+        };
+      };
+
+      const handleMouseDown = useCallback(
+        (e: React.MouseEvent<HTMLDivElement>) => {
+          // Only for left mouse button
+          if (e.button !== 0) return;
+
+          const element = ref.current;
+          if (!element) return;
+
+          const isDragHandle = dragHandleClassName
+            ? !!(e.target as HTMLElement).closest(`.${dragHandleClassName}`)
+            : true;
+          const edges = getResizeEdges(e, element);
+          const isResizing =
+            edges && (edges.top || edges.bottom || edges.left || edges.right);
+
+          if (isResizing && edges) {
+            e.preventDefault();
+            e.stopPropagation();
+            const startMousePos = { x: e.clientX, y: e.clientY };
+            const { position: startElementPos, size: startElementSize } =
+              stateRef.current;
+            let didInteract = false;
+
+            const handleMouseMoveResize = (moveEvent: MouseEvent) => {
+              didInteract = true;
+              const dx = moveEvent.clientX - startMousePos.x;
+              const dy = moveEvent.clientY - startMousePos.y;
+
+              let newWidth = startElementSize.width;
+              let newHeight = startElementSize.height;
+              let newX = startElementPos.x;
+              let newY = startElementPos.y;
+
+              if (edges.right)
+                newWidth = Math.max(minSize.width, startElementSize.width + dx);
+              if (edges.left) {
+                const proposedWidth = startElementSize.width - dx;
+                if (proposedWidth >= minSize.width) {
+                  newWidth = proposedWidth;
+                  newX = startElementPos.x + dx;
+                }
+              }
+              if (edges.bottom)
+                newHeight = Math.max(minSize.height, startElementSize.height + dy);
+              if (edges.top) {
+                const proposedHeight = startElementSize.height - dy;
+                if (proposedHeight >= minSize.height) {
+                  newHeight = proposedHeight;
+                  newY = startElementPos.y + dy;
+                }
+              }
+
+              setPosition({ x: newX, y: newY });
+              setSize({ width: newWidth, height: newHeight });
+            };
+
+            const handleMouseUpResize = () => {
+              document.removeEventListener('mousemove', handleMouseMoveResize);
+              document.removeEventListener('mouseup', handleMouseUpResize);
+              if (didInteract) {
+                chrome.storage.local.set({
+                  [POSITION_STORAGE_KEY]: stateRef.current.position,
+                  [SIZE_STORAGE_KEY]: stateRef.current.size,
+                });
+              }
+            };
+
+            document.addEventListener('mousemove', handleMouseMoveResize);
+            document.addEventListener('mouseup', handleMouseUpResize);
+          } else if (isDragHandle) {
+            e.preventDefault();
+            const startMousePos = { x: e.clientX, y: e.clientY };
+            const { position: startElementPos } = stateRef.current;
+            let didInteract = false;
+
+            const handleMouseMoveDrag = (moveEvent: MouseEvent) => {
+              didInteract = true;
+              const dx = moveEvent.clientX - startMousePos.x;
+              const dy = moveEvent.clientY - startMousePos.y;
+              setPosition({
+                x: startElementPos.x + dx,
+                y: startElementPos.y + dy,
+              });
+            };
+
+            const handleMouseUpDrag = () => {
+              document.removeEventListener('mousemove', handleMouseMoveDrag);
+              document.removeEventListener('mouseup', handleMouseUpDrag);
+              if (didInteract) {
+                chrome.storage.local.set({
+                  [POSITION_STORAGE_KEY]: stateRef.current.position,
+                });
+              } else if (onDragHandleClick) {
+                onDragHandleClick();
+              }
+            };
+
+            document.addEventListener('mousemove', handleMouseMoveDrag);
+            document.addEventListener('mouseup', handleMouseUpDrag);
+          }
+        },
+        [
+          ref,
+          isResizable,
+          minSize.width,
+          minSize.height,
+          onDragHandleClick,
+          dragHandleClassName,
+        ]
+      );
+
+      const handleMouseMoveForCursor = useCallback(
+        (e: React.MouseEvent<HTMLDivElement>) => {
+          if (!isResizable || e.buttons > 0) return;
+          const element = ref.current;
+          if (!element) return;
+          const edges = getResizeEdges(e, element);
+          if (!edges) return;
+
+          let cursor = 'auto';
+          if (edges.top && edges.left) cursor = 'nwse-resize';
+          else if (edges.top && edges.right) cursor = 'nesw-resize';
+          else if (edges.bottom && edges.left) cursor = 'nesw-resize';
+          else if (edges.bottom && edges.right) cursor = 'nwse-resize';
+          else if (edges.left || edges.right) cursor = 'ew-resize';
+          else if (edges.top || edges.bottom) cursor = 'ns-resize';
+
+          if (cursor === 'auto') {
+            const isDragHandle = dragHandleClassName
+              ? !!(e.target as HTMLElement).closest(`.${dragHandleClassName}`)
+              : false;
+            if (isDragHandle) {
+              cursor = 'grab';
+            }
+          }
+
+          // To avoid flickering, only set cursor if it needs to change
+          if (element.style.cursor !== cursor) {
+            element.style.cursor = cursor;
+          }
+        },
+        [ref, isResizable, dragHandleClassName]
+      );
+
+      return { position, size, handleMouseDown, handleMouseMoveForCursor };
+    }
+  src/background.ts: |-
+    import type {
+      GlobalState,
+      TabState,
+      RunHistoryEntry,
+      NotificationContext,
+      Message,
+    } from './types';
+
+    // --- State Management ---
+
+    const STATE_KEY = 'ai-studio-tracker-state';
+    let state: GlobalState = {};
+    let timerInterval: number | undefined;
+    let ports: { [tabId: number]: chrome.runtime.Port } = {};
+
+    async function getState(): Promise<GlobalState> {
+      const result = await chrome.storage.local.get(STATE_KEY);
+      return result[STATE_KEY] || {};
+    }
+
+    async function setState(newState: GlobalState): Promise<void> {
+      state = newState;
+      await chrome.storage.local.set({ [STATE_KEY]: newState });
+      broadcastState();
+    }
+
+    function broadcastState() {
+      for (const tabIdStr in ports) {
+        const port = ports[tabIdStr];
+        try {
+          port.postMessage({ type: 'stateUpdate', state: state });
+        } catch (e) {
+          console.warn(`Could not send state to tab ${tabIdStr}, port is likely closed.`);
+        }
+      }
+    }
+
+    function getInitialTabState(tabId: number, windowId: number): TabState {
+      return {
+        tabId,
+        windowId,
+        status: 'monitoring',
+        runName: null,
+        startTime: null,
+        elapsedTime: 0,
+        pausedTime: 0,
+        pauseStartTime: null,
+        history: [],
+        error: null,
+        isVisible: true,
+      };
+    }
+
+    // --- Timer for Elapsed Time ---
+
+    function updateTimers() {
+      let needsUpdate = false;
+      const now = Date.now();
+
+      for (const tabIdStr in state) {
+        const tabId = parseInt(tabIdStr, 10);
+        const tab = state[tabId];
+        if (tab.status === 'running' && tab.startTime) {
+          tab.elapsedTime = now - tab.startTime - tab.pausedTime;
+          needsUpdate = true;
+        }
+      }
+
+      if (needsUpdate) {
+        state = { ...state };
+        broadcastState();
+      }
+
+      const anyRunning = Object.values(state).some(
+        (t) => t.status === 'running'
+      );
+      if (!anyRunning && timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = undefined;
+      }
+    }
+
+    function ensureTimerIsRunning() {
+      if (!timerInterval) {
+        timerInterval = setInterval(updateTimers, 1000);
+      }
+    }
+
+    // --- Port-based Communication ---
+
+    chrome.runtime.onConnect.addListener((port) => {
+      if (port.name !== 'content-script' || !port.sender?.tab?.id) {
+        return;
+      }
+      const tabId = port.sender.tab.id;
+      const windowId = port.sender.tab.windowId ?? -1;
+      ports[tabId] = port;
+
+      port.onMessage.addListener(async (message: Message) => {
+        switch (message.type) {
+          case 'startRun':
+            await handleStartRun(tabId, message.runName);
+            break;
+          case 'stopRun':
+            await handleStopRun(tabId, message.isError, message.error);
+            break;
+          case 'pauseResume':
+            await handlePauseResume(tabId);
+            break;
+          case 'closeIndicator':
+            await handleCloseIndicator(tabId);
+            break;
+          case 'navigateToTab':
+            handleNavigateToTab(message.tabId, message.windowId);
+            break;
+          case 'error':
+            const currentState = await getState();
+            const tab = currentState[tabId];
+            if (tab) {
+              tab.status = 'error';
+              tab.error = message.error;
+              await setState(currentState);
+            }
+            break;
+        }
+      });
+
+      port.onDisconnect.addListener(() => {
+        delete ports[tabId];
+        console.log(`Port disconnected for tab ${tabId}`);
+      });
+
+      // Handle initial connection
+      (async () => {
+        let currentState = await getState();
+        if (!currentState[tabId]) {
+          currentState[tabId] = getInitialTabState(tabId, windowId);
+        } else {
+          currentState[tabId].isVisible = true; // Make visible on reconnect
+          currentState[tabId].windowId = windowId;
+        }
+        await setState(currentState);
+        currentState = await getState(); // Re-read state after setState
+        port.postMessage({
+          type: 'init',
+          tabId: tabId,
+          state: currentState,
+        });
+      })();
+    });
+
+
+    async function handleStartRun(tabId: number, runName: string | null) {
+      const currentState = await getState();
+      const tab = currentState[tabId];
+      if (!tab) return;
+
+      tab.status = 'running';
+      tab.startTime = Date.now();
+      tab.runName = runName;
+      tab.elapsedTime = 0;
+      tab.pausedTime = 0;
+      tab.pauseStartTime = null;
+      tab.error = null;
+
+      await setState(currentState);
+      ensureTimerIsRunning();
+    }
+
+    async function handleStopRun(
+      tabId: number,
+      isError = false,
+      error?: string
+    ) {
+      const currentState = await getState();
+      const tab = currentState[tabId];
+      if (!tab || tab.status === 'monitoring' || tab.status === 'stopped') return;
+
+      const endTime = Date.now();
+      const finalElapsedTime = tab.startTime
+        ? endTime - tab.startTime - tab.pausedTime
+        : 0;
+
+      const finalStatus = isError ? 'error' : 'stopped';
+
+      const historyEntry: RunHistoryEntry = {
+        id: `${tabId}-${endTime}`,
+        runName: tab.runName,
+        durationMs: finalElapsedTime,
+        status: finalStatus,
+        endTime: endTime,
+      };
+      tab.history.unshift(historyEntry);
+      if (tab.history.length > 20) {
+        tab.history.pop();
+      }
+
+      tab.status = 'stopped';
+      tab.startTime = null;
+      tab.runName = null;
+      tab.elapsedTime = finalElapsedTime;
+      tab.error = error || null;
+
+      await setState(currentState);
+
+      if (finalElapsedTime >= 3000) {
+        console.log(
+          `AI Studio process finished. Sending notification for run: "${historyEntry.runName}".`
+        );
+        createNotification({
+          tabId: tab.tabId,
+          windowId: tab.windowId,
+          durationMs: finalElapsedTime,
+          runName: historyEntry.runName,
+        });
+      }
+    }
+
+    async function handlePauseResume(tabId: number) {
+      const currentState = await getState();
+      const tab = currentState[tabId];
+      if (!tab) return;
+
+      if (tab.status === 'running') {
+        tab.pauseStartTime = Date.now();
+        tab.status = 'paused';
+        // Update elapsed time one last time before pausing interval
+        if (tab.startTime) {
+            tab.elapsedTime = Date.now() - tab.startTime - tab.pausedTime;
+        }
+
+      } else if (tab.status === 'paused') {
+        if (tab.pauseStartTime) {
+          tab.pausedTime += Date.now() - tab.pauseStartTime;
+        }
+        tab.pauseStartTime = null;
+        tab.status = 'running';
+        ensureTimerIsRunning();
+      }
+      await setState(currentState);
+    }
+
+    async function handleCloseIndicator(tabId: number) {
+      const currentState = await getState();
+      const tab = currentState[tabId];
+      if (tab) {
+        tab.isVisible = false;
+        await setState(currentState);
+      }
+    }
+
+    function handleNavigateToTab(tabId: number, windowId: number) {
+      chrome.windows.update(windowId, { focused: true });
+      chrome.tabs.update(tabId, { active: true });
+    }
+
+    // --- Tab Lifecycle Management ---
+
+    chrome.tabs.onRemoved.addListener(async (tabId) => {
+      const currentState = await getState();
+      if (currentState[tabId]) {
+        delete currentState[tabId];
+        await setState(currentState);
+      }
+    });
+
+
+    // --- Notification Logic ---
+
+    function formatDuration(ms: number | null | undefined): string {
+      if (!ms || ms < 1000) {
+        return '';
+      }
+      const totalSeconds = Math.round(ms / 1000);
+      if (totalSeconds < 60) {
+        return `${totalSeconds}s`;
+      }
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      if (seconds === 0) {
+        return `${minutes}m`;
+      }
+      return `${minutes}m ${seconds}s`;
+    }
+
+    function createNotification(context: NotificationContext) {
+      const durationText = formatDuration(context.durationMs);
+      const durationPart = durationText ? `in ${durationText}` : '';
+
+      let title: string;
+      if (context.runName) {
+        title = ['Finished', durationPart, `- ${context.runName}`]
+          .filter(Boolean)
+          .join(' ');
+      } else {
+        title = ['AI Studio Process Finished', durationPart]
+          .filter(Boolean)
+          .join(' ');
+      }
+
+      const message = `Your process has finished running.`;
+      chrome.notifications.create(
+        {
+          type: 'basic',
+          iconUrl: 'icon128.png',
+          title: title,
+          message: message,
+          priority: 2,
+          requireInteraction: false,
+          buttons: [{ title: 'Dismiss' }, { title: 'Remind in 5 min' }],
+        },
+        (notificationId) => {
+          if (notificationId) {
+            const storageKey = `notification:${notificationId}`;
+            chrome.storage.local.set({ [storageKey]: context });
+            console.log(
+              `Notification created: ${notificationId}. Context stored.`
+            );
+          }
+        }
+      );
+    }
+
+    chrome.notifications.onClicked.addListener(async (notificationId) => {
+      const storageKey = `notification:${notificationId}`;
+      const data = await chrome.storage.local.get(storageKey);
+      const context = data[storageKey] as NotificationContext | undefined;
+
+      if (!context) {
+        console.warn(`No context found for clicked notification: ${notificationId}`);
+        return;
+      }
+
+      handleNavigateToTab(context.tabId, context.windowId);
+      chrome.notifications.clear(notificationId);
+    });
+
+    chrome.notifications.onButtonClicked.addListener(
+      async (notificationId, buttonIndex) => {
+        const storageKey = `notification:${notificationId}`;
+        const data = await chrome.storage.local.get(storageKey);
+        const context = data[storageKey] as NotificationContext | undefined;
+
+        if (!context) {
+          console.warn(`No context found for notification: ${notificationId}`);
+          return;
+        }
+
+        switch (buttonIndex) {
+          case 0: // Dismiss
+            chrome.notifications.clear(notificationId);
+            break;
+          case 1: // Remind in 5 min
+            {
+              const alarmName = `remind-${notificationId}`;
+              await chrome.storage.local.set({ [alarmName]: context });
+              chrome.alarms.create(alarmName, { delayInMinutes: 5 });
+              chrome.notifications.clear(notificationId);
+            }
+            break;
+        }
+      }
+    );
+
+    // Listener for when a notification is closed (programmatically or by user)
+    // This is crucial for cleaning up storage to prevent exceeding quotas.
+    chrome.notifications.onClosed.addListener((notificationId) => {
+      const storageKey = `notification:${notificationId}`;
+      // We don't need to await this, it can run in the background.
+      chrome.storage.local.remove(storageKey);
+      console.log(
+        `Cleaned up storage for closed notification: ${notificationId}`
+      );
+    });
+
+    chrome.alarms.onAlarm.addListener(async (alarm) => {
+      if (alarm.name.startsWith('remind-')) {
+        const data = await chrome.storage.local.get(alarm.name);
+        const context = data[alarm.name] as NotificationContext | undefined;
+
+        if (context) {
+          console.log(`Re-creating notification from alarm: ${alarm.name}`);
+          createNotification(context);
+          await chrome.storage.local.remove(alarm.name);
+        }
+      }
+    });
+
+    // --- Service Worker Startup ---
+    (async () => {
+      state = await getState();
+      console.log('AI Studio Notifier: Background state loaded.');
+
+      const tabs = await chrome.tabs.query({});
+      const existingTabIds = new Set(tabs.map((t) => t.id).filter(Boolean));
+      const stateTabIds = Object.keys(state).map(Number);
+      let stateChanged = false;
+
+      for (const tabId of stateTabIds) {
+        if (!existingTabIds.has(tabId)) {
+          delete state[tabId];
+          stateChanged = true;
+        }
+      }
+
+      if (stateChanged) {
+        await setState(state);
+      }
+
+      if (Object.values(state).some((t) => t.status === 'running')) {
+        ensureTimerIsRunning();
+      }
+    })();
+approved: true

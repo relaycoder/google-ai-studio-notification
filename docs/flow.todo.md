@@ -1,3 +1,44 @@
+content.js problems
+
+Could not post message, port may be disconnected. Error: Attempting to use a disconnected port object
+content.js:40 (anonymous function)
+
++u.stack}return{value:e,source:t,stack:l,digest:null}}function Ql(e,t,n){return{value:e,source:null,stack:n??null,digest:t??null}}function Lu(e,t){try{console.error(t.value)}catch(n){setTimeout(function(){throw n})}}var fd=typeof WeakMap=="function"?WeakMap:Map;function ja(e,t,n){n=Qe(-1,n),n.tag=3,n.payload={element:null};var r=t.value;return n.callback=function(){el||(el=!0,$u=r),Lu(e,t)},n}function Da(e,t,n){n=Qe(-1,n),n.tag=3;var r=e.type.getDerivedStateFromError;if(typeof r=="function"){var l=t.value;n.payload=function(){return r(l)},n.callback=function(){Lu(e,t)}}var u=e.stateNode;return u!==null&&typeof u.componentDidCatch=="function"&&(n.callback=function(){Lu(e,t),typeof r!="function"&&(ct===null?ct=new Set([this]):c..............
+
+
+===
+
+expanded indicator view;
+
+1. sidebar should be resizable
+2. default size of sidebar and content list is not conforming to eyes
+3. rather than showing tab title in item history, just show datetime and duration
+4. hold ctrl + click to sidebar item should go to the tab
+5. the main portion width should be the sidebar
+6. show status to the sidebar items
+
+===
+
+make the codebase radically DRY for less code and less LoC without feature regression
+
+also the monitoring often not working especially after previous process finished.
+
+Could not post message, port may be disconnected. Error: Attempting to use a disconnected port object
+Context
+https://aistudio.google.com/prompts/1tCjzpm7gEhkVsmdAAVnTpnpxtZ9NybZF
+Stack Trace
+content.js:40 (anonymous function)
+
+===
+
+the UI and UX of expanded indicator is not so friendly for multi tab switching especially with many runs history
+
+===
+
+refactor the UI look and UX of expanded indicator and its features to be highly cohesive. also the resizable should also horizontal, edge any side.
+
+===
+
 remove go to tab action menu, to go tab just click on the notification system. because the remind me in 5 is not showing maybe because it max to two action menu
 
 ===
