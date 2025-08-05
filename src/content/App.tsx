@@ -3,30 +3,22 @@ import Indicator from './Indicator';
 import type { Status } from './types';
 
 /**
- * Attempts to capture a short summary of the current prompt from the UI.
+ * Captures the current tab's title to use as the run name.
  * This makes notifications more informative.
- * @returns A string summary of the prompt, or null if not found.
+ * @returns The tab's title, or null if it's empty.
  */
 function captureRunContext(): string | null {
   try {
-    // This selector targets the rich text editor area where the user types the prompt.
-    // It is based on observed patterns in modern web apps and may need adjustment
-    // for future AI Studio versions. We look for the last one on the page,
-    // assuming it's the active one for the current or upcoming run.
-    const promptElements = document.querySelectorAll(
-      'div[contenteditable="true"][aria-multiline="true"]'
-    );
-    if (promptElements.length > 0) {
-      const promptElement = promptElements[promptElements.length - 1];
-      const text = promptElement.textContent?.trim();
-      if (text) {
-        // Create a short summary of the prompt
-        const summary = text.split(/\s+/).slice(0, 7).join(' ');
-        return text.length > summary.length ? `${summary}...` : summary;
-      }
+    const title = document.title?.trim();
+    if (title) {
+      // Clean up the title, e.g., remove " - Google AI Studio"
+      return title.replace(/ - Google AI Studio$/, '').trim();
     }
   } catch (e) {
-    console.error('AI Studio Notifier: Error capturing run context.', e);
+    console.error(
+      'AI Studio Notifier: Error capturing run context from tab title.',
+      e
+    );
   }
   return null;
 }

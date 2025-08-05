@@ -4,29 +4,25 @@ import type { NotificationContext } from './types';
 // service worker termination. A `notification:` prefix is used for the key.
 
 function formatDuration(ms: number | null | undefined): string {
-  if (!ms || ms < 500) {
+  if (!ms || ms < 1000) {
     return '';
   }
 
   // Round to nearest second
   const totalSeconds = Math.round(ms / 1000);
 
-  if (totalSeconds < 1) {
-    return '';
-  }
-
   if (totalSeconds < 60) {
-    return `in ${totalSeconds}s`;
+    return `${totalSeconds}s`;
   }
 
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
 
   if (seconds === 0) {
-    return `in ${minutes}m`;
+    return `${minutes}m`;
   }
 
-  return `in ${minutes}m ${seconds}s`;
+  return `${minutes}m ${seconds}s`;
 }
 
 /**
@@ -34,13 +30,21 @@ function formatDuration(ms: number | null | undefined): string {
  * @param context - The context containing the tab and window IDs.
  */
 function createNotification(context: NotificationContext) {
-  const durationString = formatDuration(context.durationMs);
-  const title = context.runName
-    ? `Finished: ${context.runName}`
-    : 'AI Studio Process Finished';
-  const message = `Your process has finished running${
-    durationString ? ` ${durationString}` : '.'
-  }`;
+  const durationText = formatDuration(context.durationMs);
+  const durationPart = durationText ? `in ${durationText}` : '';
+
+  let title: string;
+  if (context.runName) {
+    title = ['Finished', durationPart, `- ${context.runName}`]
+      .filter(Boolean)
+      .join(' ');
+  } else {
+    title = ['AI Studio Process Finished', durationPart]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  const message = `Your process has finished running.`;
   // The notificationId is guaranteed to be unique for the session.
   chrome.notifications.create(
     {
@@ -53,11 +57,7 @@ function createNotification(context: NotificationContext) {
       // will auto-dismiss after a short time. On some OSes (like Windows),
       // notifications with buttons may persist in an action center regardless.
       requireInteraction: false,
-      buttons: [
-        { title: 'Go To Tab' },
-        { title: 'Dismiss' },
-        { title: 'Remind in 5 min' },
-      ],
+      buttons: [{ title: 'Dismiss' }, { title: 'Remind in 5 min' }],
     },
     (notificationId) => {
       if (notificationId) {
@@ -92,6 +92,25 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   }
 });
 
+// Listener for when a user clicks the body of a notification
+chrome.notifications.onClicked.addListener(async (notificationId) => {
+  const storageKey = `notification:${notificationId}`;
+  const data = await chrome.storage.local.get(storageKey);
+  const context = data[storageKey] as NotificationContext | undefined;
+
+  if (!context) {
+    console.warn(`No context found for clicked notification: ${notificationId}`);
+    return;
+  }
+
+  // When the notification is clicked, focus the relevant tab
+  chrome.windows.update(context.windowId, { focused: true });
+  chrome.tabs.update(context.tabId, { active: true });
+
+  // Clear the notification, which will also trigger onClosed for cleanup
+  chrome.notifications.clear(notificationId);
+});
+
 // Listener for when a user clicks a button on the notification
 chrome.notifications.onButtonClicked.addListener(
   async (notificationId, buttonIndex) => {
@@ -105,16 +124,10 @@ chrome.notifications.onButtonClicked.addListener(
     }
 
     switch (buttonIndex) {
-      case 0: // Go To Tab
-        chrome.windows.update(context.windowId, { focused: true });
-        chrome.tabs.update(context.tabId, { active: true });
-        // Clearing the notification will trigger the onClosed listener for cleanup
+      case 0: // Dismiss
         chrome.notifications.clear(notificationId);
         break;
-      case 1: // Dismiss
-        chrome.notifications.clear(notificationId);
-        break;
-      case 2: // Remind in 5 min
+      case 1: // Remind in 5 min
         {
           const alarmName = `remind-${notificationId}`;
           // Store context for when the alarm fires

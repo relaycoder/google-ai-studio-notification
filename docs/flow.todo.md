@@ -14,7 +14,7 @@ These features focus on improving the user's direct interaction with the on-page
 ===
 
 4.  **Run History in Indicator:**
-    *   **Description:** Make the indicator expandable. When expanded, it could show a list of the last 3-5 runs from the current session, including their duration and final status (e.g., `✔ 01:23`, `✖ 00:15`). also useful summary stat like avg
+    *   **Description:** Make the indicator expandable. When expanded, it could show a list of the last runs from the current session, including their duration and final status (e.g., `✔ 01:23`, `✖ 00:15`). also useful summary stat like avg
     *   **Benefit:** Provides immediate, at-a-glance context of recent activity without needing to check logs.
 
 #### Tier 2: Configuration & Customization
@@ -50,7 +50,7 @@ These are more significant features that would extend the core capabilities of t
 ===
 
 3.  **Contextual Run Naming:**
-    *   **Description:** Attempt to automatically capture context from the name when a run starts, such as the model name or the first few words of the prompt. This name would then be included in the desktop notification (e.g., "Finished in 2m 15s - Google Search...").
+    *   **Description:** Attempt to automatically capture context from the tab name when a run starts (e.g., "Finished in 2m 15s - Google Search...").
     *   **Benefit:** Makes notifications far more informative, especially if the user has multiple AI Studio tabs open.
 
 ===
@@ -58,6 +58,9 @@ These are more significant features that would extend the core capabilities of t
 4.  **Multi-Tab Awareness:**
     *   **Description:** Refactor the state management to be tab-specific. This would allow the extension to track processes in multiple AI Studio tabs simultaneously. The UI could be handled by either showing one indicator per tab or a single, master indicator that lists the status of all tracked tabs.
     *   **Benefit:** A critical feature for power users who work on multiple prompts or models in parallel.
+
+
+===
 
 to save resource,
 

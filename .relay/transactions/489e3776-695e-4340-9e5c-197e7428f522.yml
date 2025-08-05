@@ -1,0 +1,590 @@
+uuid: 489e3776-695e-4340-9e5c-197e7428f522
+projectId: google-ai-studio-notification
+createdAt: '2025-08-05T13:48:35.210Z'
+linesAdded: 29
+linesRemoved: 33
+gitCommitMsg: 'feat: Use tab title for run name and enhance notification format'
+promptSummary: >-
+  The user wants to change how the run name is captured for notifications.
+  Instead of scraping the prompt text from the page, the extension should use
+  the tab's title as the run name. The user also wants to adjust the
+  notification title format to include the duration, e.g., 'Finished in 2m 15s -
+  Google Search...'.
+reasoning:
+  - >-
+    I will update the extension to use the browser tab's title for run names,
+    making notifications more informative. This involves two main changes:
+    updating the content script to capture the tab title and modifying the
+    background script to format the notification title with this new context and
+    the run duration.
+  - >-
+    First, I'll modify `src/content/App.tsx`. I'm replacing the logic in
+    `captureRunContext` that previously tried to read the prompt from the page
+    content. The new version will simply and reliably get the document's title,
+    providing a much better context for the run, especially when multiple tabs
+    are open.
+  - >-
+    Next, I'll update `src/background.ts`. I will make two changes here. First,
+    I'll adjust `formatDuration` to return a cleaner time string without the
+    "in" prefix. Second, I'll rewrite `createNotification` to construct a more
+    descriptive notification title, combining the run name from the tab title
+    with the duration, like "Finished in 2m 15s - My Prompt".
+  - >-
+    These changes will provide users with more informative and context-aware
+    notifications.
+operations:
+  - type: write
+    path: src/content/App.tsx
+    content: |-
+      <<<<<<< SEARCH
+      /**
+       * Attempts to capture a short summary of the current prompt from the UI.
+       * This makes notifications more informative.
+       * @returns A string summary of the prompt, or null if not found.
+       */
+      function captureRunContext(): string | null {
+        try {
+          // This selector targets the rich text editor area where the user types the prompt.
+          // It is based on observed patterns in modern web apps and may need adjustment
+          // for future AI Studio versions. We look for the last one on the page,
+          // assuming it's the active one for the current or upcoming run.
+          const promptElements = document.querySelectorAll(
+            'div[contenteditable="true"][aria-multiline="true"]'
+          );
+          if (promptElements.length > 0) {
+            const promptElement = promptElements[promptElements.length - 1];
+            const text = promptElement.textContent?.trim();
+            if (text) {
+              // Create a short summary of the prompt
+              const summary = text.split(/\s+/).slice(0, 7).join(' ');
+              return text.length > summary.length ? `${summary}...` : summary;
+            }
+          }
+        } catch (e) {
+          console.error('AI Studio Notifier: Error capturing run context.', e);
+        }
+        return null;
+      }
+      =======
+      /**
+       * Captures the current tab's title to use as the run name.
+       * This makes notifications more informative.
+       * @returns The tab's title, or null if it's empty.
+       */
+      function captureRunContext(): string | null {
+        try {
+          const title = document.title?.trim();
+          if (title) {
+            // Clean up the title, e.g., remove " - Google AI Studio"
+            return title.replace(/ - Google AI Studio$/, '').trim();
+          }
+        } catch (e) {
+          console.error(
+            'AI Studio Notifier: Error capturing run context from tab title.',
+            e
+          );
+        }
+        return null;
+      }
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+  - type: write
+    path: src/background.ts
+    content: |-
+      <<<<<<< SEARCH
+      function formatDuration(ms: number | null | undefined): string {
+        if (!ms || ms < 500) {
+          return '';
+        }
+
+        // Round to nearest second
+        const totalSeconds = Math.round(ms / 1000);
+
+        if (totalSeconds < 1) {
+          return '';
+        }
+
+        if (totalSeconds < 60) {
+          return `in ${totalSeconds}s`;
+        }
+
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+
+        if (seconds === 0) {
+          return `in ${minutes}m`;
+        }
+
+        return `in ${minutes}m ${seconds}s`;
+      }
+      =======
+      function formatDuration(ms: number | null | undefined): string {
+        if (!ms || ms < 1000) {
+          return '';
+        }
+
+        // Round to nearest second
+        const totalSeconds = Math.round(ms / 1000);
+
+        if (totalSeconds < 60) {
+          return `${totalSeconds}s`;
+        }
+
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+
+        if (seconds === 0) {
+          return `${minutes}m`;
+        }
+
+        return `${minutes}m ${seconds}s`;
+      }
+      >>>>>>> REPLACE
+      <<<<<<< SEARCH
+      function createNotification(context: NotificationContext) {
+        const durationString = formatDuration(context.durationMs);
+        const title = context.runName
+          ? `Finished: ${context.runName}`
+          : 'AI Studio Process Finished';
+        const message = `Your process has finished running${
+          durationString ? ` ${durationString}` : '.'
+        }`;
+        // The notificationId is guaranteed to be unique for the session.
+        chrome.notifications.create(
+          {
+            type: 'basic',
+            iconUrl: 'icon128.png',
+            title: title,
+            message: message,
+            priority: 2,
+            // `requireInteraction: false` is the default. It means the notification
+            // will auto-dismiss after a short time. On some OSes (like Windows),
+            // notifications with buttons may persist in an action center regardless.
+            requireInteraction: false,
+            buttons: [{ title: 'Dismiss' }, { title: 'Remind in 5 min' }],
+          },
+      =======
+      function createNotification(context: NotificationContext) {
+        const durationText = formatDuration(context.durationMs);
+        const durationPart = durationText ? `in ${durationText}` : '';
+
+        let title: string;
+        if (context.runName) {
+          title = ['Finished', durationPart, `- ${context.runName}`]
+            .filter(Boolean)
+            .join(' ');
+        } else {
+          title = ['AI Studio Process Finished', durationPart]
+            .filter(Boolean)
+            .join(' ');
+        }
+
+        const message = `Your process has finished running.`;
+        // The notificationId is guaranteed to be unique for the session.
+        chrome.notifications.create(
+          {
+            type: 'basic',
+            iconUrl: 'icon128.png',
+            title: title,
+            message: message,
+            priority: 2,
+            // `requireInteraction: false` is the default. It means the notification
+            // will auto-dismiss after a short time. On some OSes (like Windows),
+            // notifications with buttons may persist in an action center regardless.
+            requireInteraction: false,
+            buttons: [{ title: 'Dismiss' }, { title: 'Remind in 5 min' }],
+          },
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+snapshot:
+  src/content/App.tsx: |-
+    import { useState, useEffect, useCallback, useRef } from 'react';
+    import Indicator from './Indicator';
+    import type { Status } from './types';
+
+    /**
+     * Attempts to capture a short summary of the current prompt from the UI.
+     * This makes notifications more informative.
+     * @returns A string summary of the prompt, or null if not found.
+     */
+    function captureRunContext(): string | null {
+      try {
+        // This selector targets the rich text editor area where the user types the prompt.
+        // It is based on observed patterns in modern web apps and may need adjustment
+        // for future AI Studio versions. We look for the last one on the page,
+        // assuming it's the active one for the current or upcoming run.
+        const promptElements = document.querySelectorAll(
+          'div[contenteditable="true"][aria-multiline="true"]'
+        );
+        if (promptElements.length > 0) {
+          const promptElement = promptElements[promptElements.length - 1];
+          const text = promptElement.textContent?.trim();
+          if (text) {
+            // Create a short summary of the prompt
+            const summary = text.split(/\s+/).slice(0, 7).join(' ');
+            return text.length > summary.length ? `${summary}...` : summary;
+          }
+        }
+      } catch (e) {
+        console.error('AI Studio Notifier: Error capturing run context.', e);
+      }
+      return null;
+    }
+
+    function App() {
+      const [status, setStatus] = useState<Status>('monitoring');
+      const [error, setError] = useState<string | null>(null);
+      const [runName, setRunName] = useState<string | null>(null);
+      const startTimeRef = useRef<number | null>(null);
+      const [elapsedTime, setElapsedTime] = useState(0);
+      const pausedTimeRef = useRef(0);
+      const pauseStartRef = useRef<number | null>(null);
+      const prePauseStatusRef = useRef<Status>('monitoring');
+
+      useEffect(() => {
+        let intervalId: number | undefined;
+
+        if (status === 'running') {
+          intervalId = window.setInterval(() => {
+            if (startTimeRef.current) {
+              const now = Date.now();
+              const totalElapsed =
+                now - startTimeRef.current - pausedTimeRef.current;
+              setElapsedTime(totalElapsed);
+            }
+          }, 1000);
+        }
+
+        return () => {
+          if (intervalId) {
+            clearInterval(intervalId);
+          }
+        };
+      }, [status]);
+
+      const handlePauseResume = useCallback(() => {
+        setStatus((currentStatus) => {
+          if (currentStatus === 'running' || currentStatus === 'monitoring') {
+            // Pausing
+            prePauseStatusRef.current = currentStatus; // Store where we came from
+
+            if (currentStatus === 'running') {
+              pauseStartRef.current = Date.now();
+              // Update elapsed time one last time before pausing interval
+              if (startTimeRef.current) {
+                setElapsedTime(
+                  Date.now() - startTimeRef.current - pausedTimeRef.current
+                );
+              }
+            }
+            return 'paused';
+          }
+
+          if (currentStatus === 'paused') {
+            // Resuming
+            const resumeTo = prePauseStatusRef.current;
+            if (resumeTo === 'running') {
+              if (pauseStartRef.current) {
+                pausedTimeRef.current += Date.now() - pauseStartRef.current;
+                pauseStartRef.current = null;
+              }
+            }
+            // Resume to the state we were in before pausing
+            return resumeTo;
+          }
+
+          return currentStatus;
+        });
+      }, []);
+
+      const checkState = useCallback(() => {
+        try {
+          const stopButtonExists = !!document.querySelector<SVGRectElement>(
+            'rect[class*="stoppable-stop"]'
+          );
+
+          // Don't do anything if paused. The pause/resume button is the only source of truth.
+          if (status === 'paused') {
+            return;
+          }
+
+          const wasRunning = status === 'running';
+
+          // --- Transition: running -> stopped ---
+          if (wasRunning && !stopButtonExists) {
+            const endTime = Date.now();
+            const finalElapsedTime = startTimeRef.current
+              ? endTime - startTimeRef.current - pausedTimeRef.current
+              : 0;
+            setElapsedTime(finalElapsedTime < 0 ? 0 : finalElapsedTime);
+
+            if (finalElapsedTime >= 3000) {
+              console.log(
+                `AI Studio process finished. Sending desktop notification for run: "${runName}".`
+              );
+              chrome.runtime.sendMessage({
+                type: 'processFinished',
+                durationMs: finalElapsedTime,
+                runName: runName,
+              });
+            } else {
+              console.log(
+                'AI Studio process finished in under 3 seconds. Skipping desktop notification.'
+              );
+            }
+
+            startTimeRef.current = null;
+            pausedTimeRef.current = 0;
+            pauseStartRef.current = null;
+            setStatus('stopped');
+            return; // End execution for this check
+          }
+
+          const newStatus = stopButtonExists ? 'running' : 'monitoring';
+
+          // No state change, do nothing.
+          if (newStatus === status) {
+            return;
+          }
+
+          // --- Transition: stopped -> monitoring ---
+          // This happens when the user clears the output. We want to stay in the 'stopped'
+          // state visually until a new run is explicitly started.
+          if (status === 'stopped' && newStatus === 'monitoring') {
+            // We reset the run name here so the indicator clears.
+            if (runName) setRunName(null);
+            return;
+          }
+
+          // --- Transition: (monitoring | stopped) -> running ---
+          if (newStatus === 'running') {
+            // This covers transitions from 'monitoring' or 'stopped' to 'running'
+            console.log('AI Studio Notifier: State changed to Running');
+            startTimeRef.current = Date.now();
+            pausedTimeRef.current = 0;
+            pauseStartRef.current = null;
+            setElapsedTime(0);
+            setRunName(captureRunContext());
+            setStatus('running');
+            setError(null);
+            return;
+          }
+
+          // --- Any other transition (e.g., running -> monitoring, which shouldn't happen) ---
+          console.log(`AI Studio Notifier: State changed to ${newStatus}`);
+          setStatus(newStatus);
+          setError(null);
+        } catch (e) {
+          console.error('AI Studio Notifier: Error during state check.', e);
+          setError('An error occurred during check.');
+          setStatus('error');
+        }
+      }, [status, runName]);
+
+      useEffect(() => {
+        // When paused, the observer should not be active to save resources.
+        if (status === 'paused') {
+          // The cleanup function of the previous effect run has already disconnected
+          // the observer. We don't set up a new one while paused.
+          return;
+        }
+
+        // Initial Check after a short delay
+        const timeoutId = setTimeout(checkState, 2000);
+
+        // Observer Setup
+        const observer = new MutationObserver(checkState);
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true,
+        });
+        console.log(
+          'AI Studio Notifier: MutationObserver is now watching the page.'
+        );
+
+        return () => {
+          clearTimeout(timeoutId);
+          observer.disconnect();
+          console.log('AI Studio Notifier: MutationObserver disconnected.');
+        };
+      }, [checkState, status]);
+
+      return (
+        <Indicator
+          status={status}
+          error={error}
+          elapsedTime={elapsedTime}
+          onPauseResume={handlePauseResume}
+          runName={runName}
+        />
+      );
+    }
+
+    export default App;
+  src/background.ts: |-
+    import type { NotificationContext } from './types';
+
+    // Context for notifications is stored in chrome.storage.local to survive
+    // service worker termination. A `notification:` prefix is used for the key.
+
+    function formatDuration(ms: number | null | undefined): string {
+      if (!ms || ms < 500) {
+        return '';
+      }
+
+      // Round to nearest second
+      const totalSeconds = Math.round(ms / 1000);
+
+      if (totalSeconds < 1) {
+        return '';
+      }
+
+      if (totalSeconds < 60) {
+        return `in ${totalSeconds}s`;
+      }
+
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+
+      if (seconds === 0) {
+        return `in ${minutes}m`;
+      }
+
+      return `in ${minutes}m ${seconds}s`;
+    }
+
+    /**
+     * Creates and displays a desktop notification.
+     * @param context - The context containing the tab and window IDs.
+     */
+    function createNotification(context: NotificationContext) {
+      const durationString = formatDuration(context.durationMs);
+      const title = context.runName
+        ? `Finished: ${context.runName}`
+        : 'AI Studio Process Finished';
+      const message = `Your process has finished running${
+        durationString ? ` ${durationString}` : '.'
+      }`;
+      // The notificationId is guaranteed to be unique for the session.
+      chrome.notifications.create(
+        {
+          type: 'basic',
+          iconUrl: 'icon128.png',
+          title: title,
+          message: message,
+          priority: 2,
+          // `requireInteraction: false` is the default. It means the notification
+          // will auto-dismiss after a short time. On some OSes (like Windows),
+          // notifications with buttons may persist in an action center regardless.
+          requireInteraction: false,
+          buttons: [{ title: 'Dismiss' }, { title: 'Remind in 5 min' }],
+        },
+        (notificationId) => {
+          if (notificationId) {
+            const storageKey = `notification:${notificationId}`;
+            chrome.storage.local.set({ [storageKey]: context });
+            console.log(
+              `Notification created: ${notificationId}. Context stored.`
+            );
+          }
+        }
+      );
+    }
+
+    // Listen for messages from the content script
+    chrome.runtime.onMessage.addListener((message, sender) => {
+      if (message.type === 'processFinished') {
+        console.log('Background script received processFinished message.');
+
+        if (sender.tab?.id && sender.tab?.windowId) {
+          const context: NotificationContext = {
+            tabId: sender.tab.id,
+            windowId: sender.tab.windowId,
+            durationMs: message.durationMs,
+            runName: message.runName,
+          };
+          createNotification(context);
+        } else {
+          console.error(
+            'Could not create notification: sender tab details are missing.'
+          );
+        }
+      }
+    });
+
+    // Listener for when a user clicks the body of a notification
+    chrome.notifications.onClicked.addListener(async (notificationId) => {
+      const storageKey = `notification:${notificationId}`;
+      const data = await chrome.storage.local.get(storageKey);
+      const context = data[storageKey] as NotificationContext | undefined;
+
+      if (!context) {
+        console.warn(`No context found for clicked notification: ${notificationId}`);
+        return;
+      }
+
+      // When the notification is clicked, focus the relevant tab
+      chrome.windows.update(context.windowId, { focused: true });
+      chrome.tabs.update(context.tabId, { active: true });
+
+      // Clear the notification, which will also trigger onClosed for cleanup
+      chrome.notifications.clear(notificationId);
+    });
+
+    // Listener for when a user clicks a button on the notification
+    chrome.notifications.onButtonClicked.addListener(
+      async (notificationId, buttonIndex) => {
+        const storageKey = `notification:${notificationId}`;
+        const data = await chrome.storage.local.get(storageKey);
+        const context = data[storageKey] as NotificationContext | undefined;
+
+        if (!context) {
+          console.warn(`No context found for notification: ${notificationId}`);
+          return;
+        }
+
+        switch (buttonIndex) {
+          case 0: // Dismiss
+            chrome.notifications.clear(notificationId);
+            break;
+          case 1: // Remind in 5 min
+            {
+              const alarmName = `remind-${notificationId}`;
+              // Store context for when the alarm fires
+              await chrome.storage.local.set({ [alarmName]: context });
+              chrome.alarms.create(alarmName, { delayInMinutes: 5 });
+              // Clearing the notification will also trigger onClosed, which cleans
+              // up the original `notification:<id>` storage.
+              chrome.notifications.clear(notificationId);
+            }
+            break;
+        }
+      }
+    );
+
+    // Listener for when a notification is closed (programmatically or by user)
+    // This is crucial for cleaning up storage to prevent exceeding quotas.
+    chrome.notifications.onClosed.addListener((notificationId) => {
+      const storageKey = `notification:${notificationId}`;
+      // We don't need to await this, it can run in the background.
+      chrome.storage.local.remove(storageKey);
+      console.log(
+        `Cleaned up storage for closed notification: ${notificationId}`
+      );
+    });
+
+    // Listener for alarms (for the "Remind" feature)
+    chrome.alarms.onAlarm.addListener(async (alarm) => {
+      if (alarm.name.startsWith('remind-')) {
+        const data = await chrome.storage.local.get(alarm.name);
+        const context = data[alarm.name] as NotificationContext | undefined;
+
+        if (context) {
+          console.log(`Re-creating notification from alarm: ${alarm.name}`);
+          createNotification(context);
+          // Clean up the storage
+          await chrome.storage.local.remove(alarm.name);
+        }
+      }
+    });
+approved: true
