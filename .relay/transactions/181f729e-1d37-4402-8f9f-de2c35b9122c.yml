@@ -1,0 +1,69 @@
+uuid: 181f729e-1d37-4402-8f9f-de2c35b9122c
+projectId: google-ai-studio-notification
+createdAt: '2025-08-05T03:39:46.749Z'
+linesAdded: 0
+linesRemoved: 1
+gitCommitMsg: 'fix(tsconfig): remove rootDir to resolve TS6059'
+promptSummary: >-
+  User received a TS6059 error because vite.config.ts was not under the
+  specified rootDir in tsconfig.json. I am fixing this by removing the `rootDir`
+  property, as Vite now controls the build structure, making the property
+  redundant and causing a conflict.
+reasoning:
+  - >-
+    Of course. My apologies, that TypeScript error is my mistake. It's a classic
+    `tsconfig.json` pathing issue.
+  - >-
+    The error `File '.../vite.config.ts' is not under 'rootDir' '.../src'`
+    occurs because the `tsconfig.json` file specified that all source files
+    (`rootDir`) must be inside the `src/` directory, but I also asked it to
+    type-check `vite.config.ts`, which lives at the project root.
+  - >-
+    The fix is to remove the `"rootDir": "./src"` setting. Your project's build
+    process is now controlled by Vite, which correctly handles the source and
+    output paths based on its own configuration (`vite.config.ts`). The
+    `tsconfig.json` is primarily used for type-checking (`tsc --noEmit`) and
+    editor support, so removing `rootDir` is safe and resolves the conflict.
+  - 'Here is the patch for `tsconfig.json`:'
+  - This single change should resolve the `tsc` error and allow you to proceed.
+operations:
+  - type: write
+    path: tsconfig.json
+    content: |-
+      <<<<<<< SEARCH
+          "strict": true,
+          "outDir": "./dist",
+          "rootDir": "./src",
+          "esModuleInterop": true,
+      =======
+          "strict": true,
+          "outDir": "./dist",
+          "esModuleInterop": true,
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+snapshot:
+  tsconfig.json: |-
+    {
+      "compilerOptions": {
+        "target": "es2020",
+        "module": "es2020",
+        "strict": true,
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "typeRoots": [
+          "./node_modules/@types"
+        ],
+        "jsx": "react-jsx"
+      },
+      "include": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "vite.config.ts"
+      ],
+      "exclude": [
+        "node_modules"
+      ]
+    }
+approved: true
