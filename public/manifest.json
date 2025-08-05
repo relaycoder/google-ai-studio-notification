@@ -3,15 +3,7 @@
   "name": "AI Studio Notifier",
   "version": "1.3.0",
   "description": "Plays a sound and shows a notification when a process in Google AI Studio finishes.",
-  "permissions": [
-    "notifications",
-    "tabs",
-    "alarms",
-    "storage"
-  ],
-  "host_permissions": [
-    "https://aistudio.google.com/*"
-  ],
+  "permissions": ["notifications", "alarms", "storage"],
   "background": {
     "service_worker": "background.js"
   },
@@ -24,12 +16,16 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["*.png", "*.mp3"],
-      "matches": ["https://aistudio.google.com/*"]
+      "resources": ["notification.mp3", "icon128.png", "icon48.png"],
+      "matches": ["<all_urls>"]
     }
   ],
   "icons": {
     "48": "icon48.png",
     "128": "icon128.png"
+  },
+  "action": {
+    "default_title": "AI Studio Notifier",
+    "default_icon": "icon128.png"
   }
 }

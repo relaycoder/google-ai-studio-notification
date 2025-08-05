@@ -28,7 +28,10 @@
     "tsconfig.json",
     "src",
     ".eslintrc.cjs",
-    ".prettierrc.json"
+    ".prettierrc.json",
+    "postcss.config.js",
+    "tailwind.config.js",
+    "vite.config.ts"
   ],
   "ignore": {
     "useGitignore": true,

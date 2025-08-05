@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Indicator from './Indicator';
 
 export type Status = 'monitoring' | 'running' | 'stopped' | 'error';
@@ -6,6 +6,7 @@ export type Status = 'monitoring' | 'running' | 'stopped' | 'error';
 function App() {
   const [status, setStatus] = useState<Status>('monitoring');
   const [error, setError] = useState<string | null>(null);
+  const startTimeRef = useRef<number | null>(null);
 
   const checkState = useCallback(() => {
     try {
@@ -17,14 +18,25 @@ function App() {
         const wasRunning = prevStatus === 'running';
         if (wasRunning && !stopButtonExists) {
           // State transition: running -> stopped
+          const endTime = Date.now();
+          const durationMs = startTimeRef.current
+            ? endTime - startTimeRef.current
+            : null;
           console.log(
             'AI Studio process finished. Playing sound and sending desktop notification.'
           );
-          chrome.runtime.sendMessage({ type: 'processFinished' });
+          chrome.runtime.sendMessage({ type: 'processFinished', durationMs });
+          startTimeRef.current = null;
           return 'stopped';
         }
 
         const newStatus = stopButtonExists ? 'running' : 'monitoring';
+
+        if (newStatus === 'running' && prevStatus !== 'running') {
+          // State transition: not running -> running
+          startTimeRef.current = Date.now();
+        }
+
         if (
           prevStatus !== newStatus &&
           !(prevStatus === 'stopped' && newStatus === 'monitoring')

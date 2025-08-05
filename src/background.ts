@@ -1,38 +1,72 @@
 interface NotificationContext {
   tabId: number;
   windowId: number;
+  durationMs?: number | null;
 }
 
-// Map to hold context for active notifications
-const notificationContexts = new Map<string, NotificationContext>();
+// Context for notifications is stored in chrome.storage.local to survive
+// service worker termination. A `notification:` prefix is used for the key.
+
+function formatDuration(ms: number | null | undefined): string {
+  if (!ms || ms < 500) {
+    return '';
+  }
+
+  // Round to nearest second
+  const totalSeconds = Math.round(ms / 1000);
+
+  if (totalSeconds < 1) {
+    return '';
+  }
+
+  if (totalSeconds < 60) {
+    return `in ${totalSeconds}s`;
+  }
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (seconds === 0) {
+    return `in ${minutes}m`;
+  }
+
+  return `in ${minutes}m ${seconds}s`;
+}
 
 /**
  * Creates and displays a desktop notification.
  * @param context - The context containing the tab and window IDs.
  */
 function createNotification(context: NotificationContext) {
+  const durationString = formatDuration(context.durationMs);
+  const message = `Your process has finished!${
+    durationString ? ` ${durationString}` : ''
+  }`;
   // The notificationId is guaranteed to be unique for the session.
-  // We can use it as the base for the alarm name.
   chrome.notifications.create(
     {
       type: 'basic',
-      iconUrl: 'assets/icon128.png',
+      iconUrl: 'icon128.png',
       title: 'AI Studio',
-      message: 'Your process has finished!',
+      message: message,
       priority: 2,
       // `requireInteraction: false` is the default. It means the notification
       // will auto-dismiss after a short time. On some OSes (like Windows),
       // notifications with buttons may persist in an action center regardless.
       requireInteraction: false,
       buttons: [
-        { title: 'View' },
+        { title: 'Go To Tab' },
         { title: 'Dismiss' },
-        { title: 'Remind in 5 mins' },
+        { title: 'Remind 5 in' },
       ],
     },
     (notificationId) => {
       if (notificationId) {
-        notificationContexts.set(notificationId, context);
+        const storageKey = `notification:${notificationId}`;
+        chrome.storage.local.set({ [storageKey]: context });
+        console.log(
+          `Notification created: ${notificationId}. Context stored.`
+        );
       }
     }
   );
@@ -44,10 +78,12 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     console.log('Background script received processFinished message.');
 
     if (sender.tab?.id && sender.tab?.windowId) {
-      createNotification({
+      const context: NotificationContext = {
         tabId: sender.tab.id,
         windowId: sender.tab.windowId,
-      });
+        durationMs: message.durationMs,
+      };
+      createNotification(context);
     } else {
       console.error(
         'Could not create notification: sender tab details are missing.'
@@ -58,14 +94,18 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 
 // Listener for when a user clicks a button on the notification
 chrome.notifications.onButtonClicked.addListener(
-  (notificationId, buttonIndex) => {
-    const context = notificationContexts.get(notificationId);
+  async (notificationId, buttonIndex) => {
+    const storageKey = `notification:${notificationId}`;
+    const data = await chrome.storage.local.get(storageKey);
+    const context = data[storageKey] as NotificationContext | undefined;
+
     if (!context) {
+      console.warn(`No context found for notification: ${notificationId}`);
       return;
     }
 
     switch (buttonIndex) {
-      case 0: // View
+      case 0: // Go To Tab
         chrome.windows.update(context.windowId, { focused: true });
         chrome.tabs.update(context.tabId, { active: true });
         // Clearing the notification will trigger the onClosed listener for cleanup
@@ -74,14 +114,15 @@ chrome.notifications.onButtonClicked.addListener(
       case 1: // Dismiss
         chrome.notifications.clear(notificationId);
         break;
-      case 2: // Remind
+      case 2: // Remind 5 min 5 min
         {
           const alarmName = `remind-${notificationId}`;
           // Store context for when the alarm fires
-          chrome.storage.local.set({ [alarmName]: context }).then(() => {
-            chrome.alarms.create(alarmName, { delayInMinutes: 5 });
-            chrome.notifications.clear(notificationId);
-          });
+          await chrome.storage.local.set({ [alarmName]: context });
+          chrome.alarms.create(alarmName, { delayInMinutes: 5 });
+          // Clearing the notification will also trigger onClosed, which cleans
+          // up the original `notification:<id>` storage.
+          chrome.notifications.clear(notificationId);
         }
         break;
     }
@@ -89,17 +130,21 @@ chrome.notifications.onButtonClicked.addListener(
 );
 
 // Listener for when a notification is closed (programmatically or by user)
-// This is crucial for cleaning up the context map to prevent memory leaks.
+// This is crucial for cleaning up storage to prevent exceeding quotas.
 chrome.notifications.onClosed.addListener((notificationId) => {
-  notificationContexts.delete(notificationId);
-  console.log(`Cleaned up context for closed notification: ${notificationId}`);
+  const storageKey = `notification:${notificationId}`;
+  // We don't need to await this, it can run in the background.
+  chrome.storage.local.remove(storageKey);
+  console.log(
+    `Cleaned up storage for closed notification: ${notificationId}`
+  );
 });
 
 // Listener for alarms (for the "Remind" feature)
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name.startsWith('remind-')) {
     const data = await chrome.storage.local.get(alarm.name);
-    const context = data[alarm.name];
+    const context = data[alarm.name] as NotificationContext | undefined;
 
     if (context) {
       console.log(`Re-creating notification from alarm: ${alarm.name}`);

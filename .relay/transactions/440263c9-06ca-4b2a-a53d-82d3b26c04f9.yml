@@ -1,0 +1,389 @@
+uuid: 440263c9-06ca-4b2a-a53d-82d3b26c04f9
+projectId: google-ai-studio-notification
+createdAt: '2025-08-05T04:03:57.518Z'
+linesAdded: 35
+linesRemoved: 28
+gitCommitMsg: 'fix: Add manifest and use storage to fix notifications'
+promptSummary: >-
+  User is reporting 'extension context invalidated' and notifications not
+  showing. The fix involves creating a manifest.json and refactoring the
+  background script to use chrome.storage instead of in-memory variables.
+reasoning:
+  - >-
+    Of course. The "extension context invalidated" error, combined with
+    notifications not appearing, strongly suggests two core issues with your
+    Chrome extension:
+  - >-
+    1.  **Missing `manifest.json`**: An extension is non-functional without a
+    manifest file. This file declares essential properties and permissions, such
+    as the ability to show notifications.
+  - >-
+    2.  **Service Worker Inactivity**: The background script (Service Worker) in
+    a Manifest V3 extension can be terminated by Chrome at any time to save
+    resources. Your script was relying on an in-memory variable
+    (`notificationContexts`) to keep track of notifications, which is lost when
+    the script stops.
+  - >-
+    I'll address both problems. First, I'll create the necessary
+    `public/manifest.json` file. Then, I'll refactor `src/background.ts` to use
+    `chrome.storage.local` for persisting notification data, which makes it
+    resilient to the service worker stopping and restarting.
+  - '### 1. Create `manifest.json`'
+  - >-
+    This new manifest file will be placed in a `public` directory, which Vite
+    will copy to the root of your built extension. It declares the necessary
+    permissions (`notifications`, `alarms`, `storage`) and configures the
+    extension's components.
+  - '### 2. Refactor Background Script for Robustness'
+  - >-
+    I'll now update `src/background.ts` to use `chrome.storage.local`. This
+    ensures that even if the service worker is terminated, the context for an
+    active notification is not lost. I will also update the notification button
+    text as you requested.
+  - >-
+    These changes should resolve the errors and make your extension work as
+    expected.
+operations:
+  - type: write
+    path: public/manifest.json
+    content: |-
+      {
+        "manifest_version": 3,
+        "name": "AI Studio Notifier",
+        "version": "1.3.0",
+        "description": "Plays a sound and shows a notification when a process in Google AI Studio finishes.",
+        "permissions": ["notifications", "alarms", "storage"],
+        "background": {
+          "service_worker": "background.js"
+        },
+        "content_scripts": [
+          {
+            "matches": ["https://aistudio.google.com/*"],
+            "js": ["content.js"],
+            "css": ["content.css"]
+          }
+        ],
+        "web_accessible_resources": [
+          {
+            "resources": ["notification.mp3", "assets/*"],
+            "matches": ["<all_urls>"]
+          }
+        ],
+        "icons": {
+          "128": "assets/icon128.png"
+        },
+        "action": {
+          "default_title": "AI Studio Notifier",
+          "default_icon": "assets/icon128.png"
+        }
+      }
+    patchStrategy: replace
+  - type: write
+    path: src/background.ts
+    content: >-
+      --- src/background.ts
+
+      +++ src/background.ts
+
+      @@ -4,15 +4,13 @@
+         windowId: number;
+       }
+       
+      -// Map to hold context for active notifications
+
+      -const notificationContexts = new Map<string, NotificationContext>();
+
+      +// Context for notifications is stored in chrome.storage.local to survive
+
+      +// service worker termination. A `notification:` prefix is used for the
+      key.
+       
+       /**
+        * Creates and displays a desktop notification.
+        * @param context - The context containing the tab and window IDs.
+        */
+       function createNotification(context: NotificationContext) {
+      -  // The notificationId is guaranteed to be unique for the session.
+
+      -  // We can use it as the base for the alarm name.
+
+      +  // The notificationId is guaranteed to be unique for the session.
+         chrome.notifications.create(
+           {
+             type: 'basic',
+      @@ -24,18 +22,23 @@
+             // will auto-dismiss after a short time. On some OSes (like Windows),
+             // notifications with buttons may persist in an action center regardless.
+             requireInteraction: false,
+             buttons: [
+      -        { title: 'View' },
+
+      +        { title: 'Go To Tab' },
+               { title: 'Dismiss' },
+      -        { title: 'Remind in 5 mins' },
+
+      +        { title: 'Remind 5 min' },
+             ],
+           },
+           (notificationId) => {
+             if (notificationId) {
+      -        notificationContexts.set(notificationId, context);
+
+      +        const storageKey = `notification:${notificationId}`;
+
+      +        chrome.storage.local.set({ [storageKey]: context });
+
+      +        console.log(
+
+      +          `Notification created: ${notificationId}. Context stored.`
+
+      +        );
+             }
+           }
+         );
+       }
+       
+       // Listen for messages from the content script
+       chrome.runtime.onMessage.addListener((message, sender) => {
+      @@ -56,47 +59,55 @@
+       
+       // Listener for when a user clicks a button on the notification
+       chrome.notifications.onButtonClicked.addListener(
+      -  (notificationId, buttonIndex) => {
+
+      -    const context = notificationContexts.get(notificationId);
+
+      +  async (notificationId, buttonIndex) => {
+
+      +    const storageKey = `notification:${notificationId}`;
+
+      +    const data = await chrome.storage.local.get(storageKey);
+
+      +    const context = data[storageKey] as NotificationContext | undefined;
+
+      +
+           if (!context) {
+      +      console.warn(`No context found for notification:
+      ${notificationId}`);
+             return;
+           }
+       
+           switch (buttonIndex) {
+      -      case 0: // View
+
+      +      case 0: // Go To Tab
+               chrome.windows.update(context.windowId, { focused: true });
+               chrome.tabs.update(context.tabId, { active: true });
+               // Clearing the notification will trigger the onClosed listener for cleanup
+               chrome.notifications.clear(notificationId);
+               break;
+             case 1: // Dismiss
+               chrome.notifications.clear(notificationId);
+               break;
+      -      case 2: // Remind
+
+      +      case 2: // Remind 5 min
+               {
+                 const alarmName = `remind-${notificationId}`;
+                 // Store context for when the alarm fires
+      -          chrome.storage.local.set({ [alarmName]: context }).then(() => {
+
+      -            chrome.alarms.create(alarmName, { delayInMinutes: 5 });
+
+      -            chrome.notifications.clear(notificationId);
+
+      -          });
+
+      +          await chrome.storage.local.set({ [alarmName]: context });
+
+      +          chrome.alarms.create(alarmName, { delayInMinutes: 5 });
+
+      +          // Clearing the notification will also trigger onClosed, which
+      cleans
+
+      +          // up the original `notification:<id>` storage.
+
+      +          chrome.notifications.clear(notificationId);
+               }
+               break;
+           }
+         }
+       );
+       
+       // Listener for when a notification is closed (programmatically or by user)
+      -// This is crucial for cleaning up the context map to prevent memory
+      leaks.
+
+      +// This is crucial for cleaning up storage to prevent exceeding quotas.
+       chrome.notifications.onClosed.addListener((notificationId) => {
+      -  notificationContexts.delete(notificationId);
+
+      -  console.log(`Cleaned up context for closed notification:
+      ${notificationId}`);
+
+      +  const storageKey = `notification:${notificationId}`;
+
+      +  // We don't need to await this, it can run in the background.
+
+      +  chrome.storage.local.remove(storageKey);
+
+      +  console.log(
+
+      +    `Cleaned up storage for closed notification: ${notificationId}`
+
+      +  );
+       });
+       
+       // Listener for alarms (for the "Remind" feature)
+       chrome.alarms.onAlarm.addListener(async (alarm) => {
+    patchStrategy: new-unified
+snapshot:
+  public/manifest.json: |-
+    {
+      "manifest_version": 3,
+      "name": "AI Studio Notifier",
+      "version": "1.3.0",
+      "description": "Plays a sound and shows a notification when a process in Google AI Studio finishes.",
+      "permissions": [
+        "notifications",
+        "tabs",
+        "alarms",
+        "storage"
+      ],
+      "host_permissions": [
+        "https://aistudio.google.com/*"
+      ],
+      "background": {
+        "service_worker": "background.js"
+      },
+      "content_scripts": [
+        {
+          "matches": ["https://aistudio.google.com/*"],
+          "js": ["content.js"],
+          "css": ["content.css"]
+        }
+      ],
+      "web_accessible_resources": [
+        {
+          "resources": ["*.png", "*.mp3"],
+          "matches": ["https://aistudio.google.com/*"]
+        }
+      ],
+      "icons": {
+        "48": "icon48.png",
+        "128": "icon128.png"
+      }
+    }
+  src/background.ts: |-
+    interface NotificationContext {
+      tabId: number;
+      windowId: number;
+    }
+
+    // Map to hold context for active notifications
+    const notificationContexts = new Map<string, NotificationContext>();
+
+    /**
+     * Creates and displays a desktop notification.
+     * @param context - The context containing the tab and window IDs.
+     */
+    function createNotification(context: NotificationContext) {
+      // The notificationId is guaranteed to be unique for the session.
+      // We can use it as the base for the alarm name.
+      chrome.notifications.create(
+        {
+          type: 'basic',
+          iconUrl: 'assets/icon128.png',
+          title: 'AI Studio',
+          message: 'Your process has finished!',
+          priority: 2,
+          // `requireInteraction: false` is the default. It means the notification
+          // will auto-dismiss after a short time. On some OSes (like Windows),
+          // notifications with buttons may persist in an action center regardless.
+          requireInteraction: false,
+          buttons: [
+            { title: 'Go To Tab' },
+            { title: 'Dismiss' },
+            { title: 'Remind 5 min' },
+          ],
+        },
+        (notificationId) => {
+          if (notificationId) {
+            notificationContexts.set(notificationId, context);
+          }
+        }
+      );
+    }
+
+    // Listen for messages from the content script
+    chrome.runtime.onMessage.addListener((message, sender) => {
+      if (message.type === 'processFinished') {
+        console.log('Background script received processFinished message.');
+
+        if (sender.tab?.id && sender.tab?.windowId) {
+          createNotification({
+            tabId: sender.tab.id,
+            windowId: sender.tab.windowId,
+          });
+        } else {
+          console.error(
+            'Could not create notification: sender tab details are missing.'
+          );
+        }
+      }
+    });
+
+    // Listener for when a user clicks a button on the notification
+    chrome.notifications.onButtonClicked.addListener(
+      (notificationId, buttonIndex) => {
+        const context = notificationContexts.get(notificationId);
+        if (!context) {
+          return;
+        }
+
+        switch (buttonIndex) {
+          case 0: // Go To Tab
+            chrome.windows.update(context.windowId, { focused: true });
+            chrome.tabs.update(context.tabId, { active: true });
+            // Clearing the notification will trigger the onClosed listener for cleanup
+            chrome.notifications.clear(notificationId);
+            break;
+          case 1: // Dismiss
+            chrome.notifications.clear(notificationId);
+            break;
+          case 2: // Remind 5 min
+            {
+              const alarmName = `remind-${notificationId}`;
+              // Store context for when the alarm fires
+              chrome.storage.local.set({ [alarmName]: context }).then(() => {
+                chrome.alarms.create(alarmName, { delayInMinutes: 5 });
+                chrome.notifications.clear(notificationId);
+              });
+            }
+            break;
+        }
+      }
+    );
+
+    // Listener for when a notification is closed (programmatically or by user)
+    // This is crucial for cleaning up the context map to prevent memory leaks.
+    chrome.notifications.onClosed.addListener((notificationId) => {
+      notificationContexts.delete(notificationId);
+      console.log(`Cleaned up context for closed notification: ${notificationId}`);
+    });
+
+    // Listener for alarms (for the "Remind" feature)
+    chrome.alarms.onAlarm.addListener(async (alarm) => {
+      if (alarm.name.startsWith('remind-')) {
+        const data = await chrome.storage.local.get(alarm.name);
+        const context = data[alarm.name];
+
+        if (context) {
+          console.log(`Re-creating notification from alarm: ${alarm.name}`);
+          createNotification(context);
+          // Clean up the storage
+          await chrome.storage.local.remove(alarm.name);
+        }
+      }
+    });
+approved: true

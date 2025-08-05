@@ -1,0 +1,392 @@
+uuid: 48332d73-77de-4547-ab87-f87c53d95015
+projectId: google-ai-studio-notification
+createdAt: '2025-08-05T04:10:48.231Z'
+linesAdded: 51
+linesRemoved: 6
+gitCommitMsg: 'feat: Display process duration in notification'
+promptSummary: >-
+  The user wants to display the time taken for a process in the desktop
+  notification. This involves timing the process in the content script and
+  sending the duration to the background script to be included in the
+  notification message.
+reasoning:
+  - >-
+    I will make the following changes to display the process duration in the
+    notification:
+  - 1.  **In `src/content/App.tsx`:**
+  - '*   I''ll introduce a `useRef` to store the timestamp when a process starts.'
+  - '*   When the process finishes, I will calculate the duration.'
+  - >-
+    *   This duration will be sent to the background script along with the
+    `processFinished` message.
+  - 2.  **In `src/background.ts`:**
+  - >-
+    *   I'll update the `NotificationContext` type to include the optional
+    `durationMs`.
+  - >-
+    *   A new `formatDuration` helper function will be added to convert
+    milliseconds into a readable string (e.g., "in 1m 30s").
+  - >-
+    *   The `onMessage` listener will be updated to receive the duration and
+    store it in the context.
+  - >-
+    *   The `createNotification` function will use this duration to enhance the
+    notification message.
+  - >-
+    *   The reminder logic will also be updated to correctly handle the new
+    context structure, ensuring reminders also show the original duration.
+  - 'Here are the code patches:'
+operations:
+  - type: write
+    path: src/content/App.tsx
+    content: >-
+      --- src/content/App.tsx
+
+      +++ src/content/App.tsx
+
+      @@ -1,11 +1,12 @@
+
+      -import { useState, useEffect, useCallback } from 'react';
+
+      +import { useState, useEffect, useCallback, useRef } from 'react';
+       import Indicator from './Indicator';
+       
+       export type Status = 'monitoring' | 'running' | 'stopped' | 'error';
+       
+       function App() {
+         const [status, setStatus] = useState<Status>('monitoring');
+         const [error, setError] = useState<string | null>(null);
+      +  const startTimeRef = useRef<number | null>(null);
+       
+         const checkState = useCallback(() => {
+           try {
+      @@ -16,16 +17,28 @@
+             setStatus((prevStatus) => {
+               const wasRunning = prevStatus === 'running';
+               if (wasRunning && !stopButtonExists) {
+                 // State transition: running -> stopped
+      +          const endTime = Date.now();
+
+      +          const durationMs = startTimeRef.current
+
+      +            ? endTime - startTimeRef.current
+
+      +            : null;
+                 console.log(
+                   'AI Studio process finished. Playing sound and sending desktop notification.'
+                 );
+      -          chrome.runtime.sendMessage({ type: 'processFinished' });
+
+      +          chrome.runtime.sendMessage({ type: 'processFinished',
+      durationMs });
+
+      +          startTimeRef.current = null;
+                 return 'stopped';
+               }
+       
+               const newStatus = stopButtonExists ? 'running' : 'monitoring';
+      +
+
+      +        if (newStatus === 'running' && prevStatus !== 'running') {
+
+      +          // State transition: not running -> running
+
+      +          startTimeRef.current = Date.now();
+
+      +        }
+
+      +
+               if (
+                 prevStatus !== newStatus &&
+                 !(prevStatus === 'stopped' && newStatus === 'monitoring')
+    patchStrategy: new-unified
+  - type: write
+    path: src/background.ts
+    content: |-
+      --- src/background.ts
+      +++ src/background.ts
+      @@ -1,16 +1,48 @@
+       interface NotificationContext {
+         tabId: number;
+         windowId: number;
+      +  durationMs?: number | null;
+       }
+       
+       // Context for notifications is stored in chrome.storage.local to survive
+       // service worker termination. A `notification:` prefix is used for the key.
+       
+      +function formatDuration(ms: number | null | undefined): string {
+      +  if (!ms || ms < 500) {
+      +    return '';
+      +  }
+      +
+      +  // Round to nearest second
+      +  const totalSeconds = Math.round(ms / 1000);
+      +
+      +  if (totalSeconds < 1) {
+      +    return '';
+      +  }
+      +
+      +  if (totalSeconds < 60) {
+      +    return `in ${totalSeconds}s`;
+      +  }
+      +
+      +  const minutes = Math.floor(totalSeconds / 60);
+      +  const seconds = totalSeconds % 60;
+      +
+      +  if (seconds === 0) {
+      +    return `in ${minutes}m`;
+      +  }
+      +
+      +  return `in ${minutes}m ${seconds}s`;
+      +}
+      +
+       /**
+        * Creates and displays a desktop notification.
+        * @param context - The context containing the tab and window IDs.
+        */
+       function createNotification(context: NotificationContext) {
+      +  const durationString = formatDuration(context.durationMs);
+      +  const message = `Your process has finished!${
+      +    durationString ? ` ${durationString}` : ''
+      +  }`;
+         // The notificationId is guaranteed to be unique for the session.
+         chrome.notifications.create(
+           {
+             type: 'basic',
+             iconUrl: 'icon128.png',
+             title: 'AI Studio',
+      -      message: 'Your process has finished!',
+      +      message: message,
+             priority: 2,
+             // `requireInteraction: false` is the default. It means the notification
+             // will auto-dismiss after a short time. On some OSes (like Windows),
+      @@ -41,10 +73,14 @@
+           console.log('Background script received processFinished message.');
+       
+           if (sender.tab?.id && sender.tab?.windowId) {
+      -      createNotification({
+      +      const context: NotificationContext = {
+               tabId: sender.tab.id,
+               windowId: sender.tab.windowId,
+      -      });
+      +        durationMs: message.durationMs,
+      +      };
+      +      createNotification(context);
+           } else {
+             console.error(
+               'Could not create notification: sender tab details are missing.'
+      @@ -107,7 +143,7 @@
+       chrome.alarms.onAlarm.addListener(async (alarm) => {
+         if (alarm.name.startsWith('remind-')) {
+           const data = await chrome.storage.local.get(alarm.name);
+      -    const context = data[alarm.name];
+      +    const context = data[alarm.name] as NotificationContext | undefined;
+       
+           if (context) {
+             console.log(`Re-creating notification from alarm: ${alarm.name}`);
+    patchStrategy: new-unified
+snapshot:
+  src/content/App.tsx: |-
+    import { useState, useEffect, useCallback } from 'react';
+    import Indicator from './Indicator';
+
+    export type Status = 'monitoring' | 'running' | 'stopped' | 'error';
+
+    function App() {
+      const [status, setStatus] = useState<Status>('monitoring');
+      const [error, setError] = useState<string | null>(null);
+
+      const checkState = useCallback(() => {
+        try {
+          const stopButtonExists = !!document.querySelector<SVGRectElement>(
+            'rect[class*="stoppable-stop"]'
+          );
+
+          setStatus((prevStatus) => {
+            const wasRunning = prevStatus === 'running';
+            if (wasRunning && !stopButtonExists) {
+              // State transition: running -> stopped
+              console.log(
+                'AI Studio process finished. Playing sound and sending desktop notification.'
+              );
+              chrome.runtime.sendMessage({ type: 'processFinished' });
+              return 'stopped';
+            }
+
+            const newStatus = stopButtonExists ? 'running' : 'monitoring';
+            if (
+              prevStatus !== newStatus &&
+              !(prevStatus === 'stopped' && newStatus === 'monitoring')
+            ) {
+              console.log(
+                `AI Studio Notifier: State changed to ${
+                  stopButtonExists ? 'Running' : 'Monitoring'
+                }`
+              );
+            }
+            // If we were stopped, and a new process hasn't started, stay stopped visually
+            // until a new run starts.
+            if (prevStatus === 'stopped' && !stopButtonExists) {
+                return 'stopped';
+            }
+
+            return newStatus;
+          });
+          setError(null);
+        } catch (e) {
+          console.error('AI Studio Notifier: Error during state check.', e);
+          setError('An error occurred during check.');
+          setStatus('error');
+        }
+      }, []);
+
+      useEffect(() => {
+        // Initial Check after a short delay
+        const timeoutId = setTimeout(checkState, 2000);
+
+        // Observer Setup
+        const observer = new MutationObserver(checkState);
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true,
+        });
+        console.log(
+          'AI Studio Notifier: MutationObserver is now watching the page.'
+        );
+
+        return () => {
+          clearTimeout(timeoutId);
+          observer.disconnect();
+        };
+      }, [checkState]);
+
+      return <Indicator status={status} error={error} />;
+    }
+
+    export default App;
+  src/background.ts: |-
+    interface NotificationContext {
+      tabId: number;
+      windowId: number;
+    }
+
+    // Context for notifications is stored in chrome.storage.local to survive
+    // service worker termination. A `notification:` prefix is used for the key.
+
+    /**
+     * Creates and displays a desktop notification.
+     * @param context - The context containing the tab and window IDs.
+     */
+    function createNotification(context: NotificationContext) {
+      // The notificationId is guaranteed to be unique for the session.
+      chrome.notifications.create(
+        {
+          type: 'basic',
+          iconUrl: 'icon128.png',
+          title: 'AI Studio',
+          message: 'Your process has finished!',
+          priority: 2,
+          // `requireInteraction: false` is the default. It means the notification
+          // will auto-dismiss after a short time. On some OSes (like Windows),
+          // notifications with buttons may persist in an action center regardless.
+          requireInteraction: false,
+          buttons: [
+            { title: 'Go To Tab' },
+            { title: 'Dismiss' },
+            { title: 'Remind 5 in' },
+          ],
+        },
+        (notificationId) => {
+          if (notificationId) {
+            const storageKey = `notification:${notificationId}`;
+            chrome.storage.local.set({ [storageKey]: context });
+            console.log(
+              `Notification created: ${notificationId}. Context stored.`
+            );
+          }
+        }
+      );
+    }
+
+    // Listen for messages from the content script
+    chrome.runtime.onMessage.addListener((message, sender) => {
+      if (message.type === 'processFinished') {
+        console.log('Background script received processFinished message.');
+
+        if (sender.tab?.id && sender.tab?.windowId) {
+          createNotification({
+            tabId: sender.tab.id,
+            windowId: sender.tab.windowId,
+          });
+        } else {
+          console.error(
+            'Could not create notification: sender tab details are missing.'
+          );
+        }
+      }
+    });
+
+    // Listener for when a user clicks a button on the notification
+    chrome.notifications.onButtonClicked.addListener(
+      async (notificationId, buttonIndex) => {
+        const storageKey = `notification:${notificationId}`;
+        const data = await chrome.storage.local.get(storageKey);
+        const context = data[storageKey] as NotificationContext | undefined;
+
+        if (!context) {
+          console.warn(`No context found for notification: ${notificationId}`);
+          return;
+        }
+
+        switch (buttonIndex) {
+          case 0: // Go To Tab
+            chrome.windows.update(context.windowId, { focused: true });
+            chrome.tabs.update(context.tabId, { active: true });
+            // Clearing the notification will trigger the onClosed listener for cleanup
+            chrome.notifications.clear(notificationId);
+            break;
+          case 1: // Dismiss
+            chrome.notifications.clear(notificationId);
+            break;
+          case 2: // Remind 5 min 5 min
+            {
+              const alarmName = `remind-${notificationId}`;
+              // Store context for when the alarm fires
+              await chrome.storage.local.set({ [alarmName]: context });
+              chrome.alarms.create(alarmName, { delayInMinutes: 5 });
+              // Clearing the notification will also trigger onClosed, which cleans
+              // up the original `notification:<id>` storage.
+              chrome.notifications.clear(notificationId);
+            }
+            break;
+        }
+      }
+    );
+
+    // Listener for when a notification is closed (programmatically or by user)
+    // This is crucial for cleaning up storage to prevent exceeding quotas.
+    chrome.notifications.onClosed.addListener((notificationId) => {
+      const storageKey = `notification:${notificationId}`;
+      // We don't need to await this, it can run in the background.
+      chrome.storage.local.remove(storageKey);
+      console.log(
+        `Cleaned up storage for closed notification: ${notificationId}`
+      );
+    });
+
+    // Listener for alarms (for the "Remind" feature)
+    chrome.alarms.onAlarm.addListener(async (alarm) => {
+      if (alarm.name.startsWith('remind-')) {
+        const data = await chrome.storage.local.get(alarm.name);
+        const context = data[alarm.name];
+
+        if (context) {
+          console.log(`Re-creating notification from alarm: ${alarm.name}`);
+          createNotification(context);
+          // Clean up the storage
+          await chrome.storage.local.remove(alarm.name);
+        }
+      }
+    });
+approved: true
