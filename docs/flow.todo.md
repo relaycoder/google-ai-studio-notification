@@ -1,3 +1,21 @@
+to save resource,
+
+1. after finish proc
+
+===
+
+no need to fire notification if the finish processed duration below 3 second
+
+===
+
+move all constants to constants.ts and type to types.ts
+
+===
+
+add pause resume feature to floating indicator
+
+===
+
 in floating indicator add time took timer so user know current time while processing
 
 ===

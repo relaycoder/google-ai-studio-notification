@@ -3,11 +3,14 @@
 src/
   content/
     App.tsx
+    constants.ts
     index.tsx
     Indicator.tsx
     style.css
+    types.ts
     useDrag.ts
   background.ts
+  types.ts
 .eslintrc.cjs
 .prettierrc.json
 package.json
@@ -19,39 +22,14 @@ vite.config.ts
 
 # Files
 
-## File: src/content/index.tsx
+## File: src/content/constants.ts
 ```typescript
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App';
-import './style.css';
+import type { Status } from './types';
 
-// Create a root element to mount the React app
-const rootEl = document.createElement('div');
-rootEl.id = 'ai-studio-notifier-root';
-document.body.appendChild(rootEl);
-
-// Render the App component
-const root = ReactDOM.createRoot(rootEl);
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
-```
-
-## File: src/content/Indicator.tsx
-```typescript
-import { useRef, useEffect, useState } from 'react';
-import { useDrag } from './useDrag';
-import type { Status } from './App';
-
-interface IndicatorProps {
-  status: Status;
-  error: string | null;
-}
-
-const statusConfig: Record<Status, { bgColor: string; text: string; animate: boolean }> = {
+export const statusConfig: Record<
+  Status,
+  { bgColor: string; text: string; animate: boolean }
+> = {
   monitoring: {
     bgColor: 'bg-blue-500',
     text: 'Monitoring',
@@ -72,72 +50,54 @@ const statusConfig: Record<Status, { bgColor: string; text: string; animate: boo
     text: 'Error!',
     animate: false,
   },
+  paused: {
+    bgColor: 'bg-orange-500',
+    text: 'Paused',
+    animate: false,
+  },
 };
+```
 
-function Indicator({ status, error }: IndicatorProps) {
-  const indicatorRef = useRef<HTMLDivElement>(null);
-  const { position, handleMouseDown } = useDrag(indicatorRef);
-  const [isVisible, setIsVisible] = useState(true);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+## File: src/content/types.ts
+```typescript
+export type Status = 'monitoring' | 'running' | 'stopped' | 'error' | 'paused';
 
-  useEffect(() => {
-    // Preload audio element when component mounts
-    const soundUrl = chrome.runtime.getURL('notification.mp3');
-    audioRef.current = new Audio(soundUrl);
-  }, []);
-
-  useEffect(() => {
-    if (status === 'stopped') {
-      audioRef.current
-        ?.play()
-        .catch((err) => console.error('Audio play failed: ', err));
-    }
-  }, [status]);
-
-  if (!isVisible) {
-    return null;
-  }
-
-  const config = statusConfig[status];
-
-  return (
-    <div
-      ref={indicatorRef}
-      className="fixed top-0 left-0 z-[99999] rounded-lg shadow-lg text-white font-sans select-none"
-      style={{
-        transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
-        backgroundColor: 'rgba(20, 20, 20, 0.8)',
-        backdropFilter: 'blur(4px)',
-      }}
-    >
-      <div
-        className="flex items-center gap-3 p-2 cursor-grab"
-        onMouseDown={handleMouseDown}
-      >
-        <div className="flex items-center gap-2">
-          <span
-            className={`w-3 h-3 rounded-full ${config.bgColor} ${
-              config.animate ? 'animate-pulse' : ''
-            }`}
-          ></span>
-          <span className="text-sm font-medium">{config.text}</span>
-        </div>
-        <button
-          onClick={() => setIsVisible(false)}
-          className="text-xs text-gray-400 hover:text-white cursor-pointer"
-          title="Hide Indicator"
-        >
-          &#x2715;
-        </button>
-      </div>
-      {status === 'error' && error && (
-        <p className="text-xs text-red-400 px-2 pb-2 -mt-1">{error}</p>
-      )}
-    </div>
-  );
+export interface IndicatorProps {
+  status: Status;
+  error: string | null;
+  elapsedTime: number;
+  onPauseResume: () => void;
 }
+```
 
-export default Indicator;
+## File: src/types.ts
+```typescript
+export interface NotificationContext {
+  tabId: number;
+  windowId: number;
+  durationMs?: number | null;
+}
+```
+
+## File: src/content/index.tsx
+```typescript
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './style.css';
+
+// Create a root element to mount the React app
+const rootEl = document.createElement('div');
+rootEl.id = 'ai-studio-notifier-root';
+document.body.appendChild(rootEl);
+
+// Render the App component
+const root = ReactDOM.createRoot(rootEl);
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
 ```
 
 ## File: src/content/style.css
@@ -265,97 +225,142 @@ export default defineConfig({
 });
 ```
 
-## File: src/content/App.tsx
+## File: src/content/Indicator.tsx
 ```typescript
-import { useState, useEffect, useCallback, useRef } from 'react';
-import Indicator from './Indicator';
+import { useRef, useEffect, useState } from 'react';
+import { useDrag } from './useDrag';
+import { statusConfig } from './constants';
+import type { IndicatorProps } from './types';
 
-export type Status = 'monitoring' | 'running' | 'stopped' | 'error';
+function formatElapsedTime(ms: number): string {
+  if (ms <= 0) return '00:00';
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const paddedMinutes = String(minutes).padStart(2, '0');
+  const paddedSeconds = String(seconds).padStart(2, '0');
+  return `${paddedMinutes}:${paddedSeconds}`;
+}
 
-function App() {
-  const [status, setStatus] = useState<Status>('monitoring');
-  const [error, setError] = useState<string | null>(null);
-  const startTimeRef = useRef<number | null>(null);
+function Indicator({
+  status,
+  error,
+  elapsedTime,
+  onPauseResume,
+}: IndicatorProps) {
+  const indicatorRef = useRef<HTMLDivElement>(null);
+  const { position, handleMouseDown } = useDrag(indicatorRef);
+  const [isVisible, setIsVisible] = useState(true);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const checkState = useCallback(() => {
-    try {
-      const stopButtonExists = !!document.querySelector<SVGRectElement>(
-        'rect[class*="stoppable-stop"]'
-      );
-
-      setStatus((prevStatus) => {
-        const wasRunning = prevStatus === 'running';
-        if (wasRunning && !stopButtonExists) {
-          // State transition: running -> stopped
-          const endTime = Date.now();
-          const durationMs = startTimeRef.current
-            ? endTime - startTimeRef.current
-            : null;
-          console.log(
-            'AI Studio process finished. Playing sound and sending desktop notification.'
-          );
-          chrome.runtime.sendMessage({ type: 'processFinished', durationMs });
-          startTimeRef.current = null;
-          return 'stopped';
-        }
-
-        const newStatus = stopButtonExists ? 'running' : 'monitoring';
-
-        if (newStatus === 'running' && prevStatus !== 'running') {
-          // State transition: not running -> running
-          startTimeRef.current = Date.now();
-        }
-
-        if (
-          prevStatus !== newStatus &&
-          !(prevStatus === 'stopped' && newStatus === 'monitoring')
-        ) {
-          console.log(
-            `AI Studio Notifier: State changed to ${
-              stopButtonExists ? 'Running' : 'Monitoring'
-            }`
-          );
-        }
-        // If we were stopped, and a new process hasn't started, stay stopped visually
-        // until a new run starts.
-        if (prevStatus === 'stopped' && !stopButtonExists) {
-            return 'stopped';
-        }
-
-        return newStatus;
-      });
-      setError(null);
-    } catch (e) {
-      console.error('AI Studio Notifier: Error during state check.', e);
-      setError('An error occurred during check.');
-      setStatus('error');
-    }
+  useEffect(() => {
+    // Preload audio element when component mounts
+    const soundUrl = chrome.runtime.getURL('notification.mp3');
+    audioRef.current = new Audio(soundUrl);
   }, []);
 
   useEffect(() => {
-    // Initial Check after a short delay
-    const timeoutId = setTimeout(checkState, 2000);
+    if (status === 'stopped') {
+      audioRef.current
+        ?.play()
+        .catch((err) => console.error('Audio play failed: ', err));
+    }
+  }, [status]);
 
-    // Observer Setup
-    const observer = new MutationObserver(checkState);
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-    });
-    console.log(
-      'AI Studio Notifier: MutationObserver is now watching the page.'
-    );
+  if (!isVisible) {
+    return null;
+  }
 
-    return () => {
-      clearTimeout(timeoutId);
-      observer.disconnect();
-    };
-  }, [checkState]);
+  const config = statusConfig[status];
+  const isPausable = status === 'running' || status === 'paused';
 
-  return <Indicator status={status} error={error} />;
+  return (
+    <div
+      ref={indicatorRef}
+      className="fixed top-0 left-0 z-[99999] rounded-lg shadow-lg text-white font-sans select-none"
+      style={{
+        transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
+        backgroundColor: 'rgba(20, 20, 20, 0.8)',
+        backdropFilter: 'blur(4px)',
+      }}
+    >
+      <div
+        className="flex items-center gap-3 p-2 cursor-grab"
+        onMouseDown={handleMouseDown}
+      >
+        <div className="flex items-center gap-2">
+          <span
+            className={`w-3 h-3 rounded-full ${config.bgColor} ${
+              config.animate ? 'animate-pulse' : ''
+            }`}
+          ></span>
+          <span className="text-sm font-medium">{config.text}</span>
+          {(status === 'running' ||
+            status === 'paused' ||
+            status === 'stopped') && (
+            <span className="text-sm font-mono text-gray-300">
+              {formatElapsedTime(elapsedTime)}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center">
+          {isPausable && (
+            <button
+              onClick={onPauseResume}
+              className="text-gray-400 hover:text-white cursor-pointer p-1 rounded-full"
+              title={status === 'running' ? 'Pause' : 'Resume'}
+            >
+              {status === 'running' ? (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="block"
+                >
+                  <path d="M14 19h4V5h-4v14zm-8 0h4V5H6v14z" />
+                </svg>
+              ) : (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="block"
+                >
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
+            </button>
+          )}
+          <button
+            onClick={() => setIsVisible(false)}
+            className="text-gray-400 hover:text-white cursor-pointer p-1 rounded-full"
+            title="Hide Indicator"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="block"
+            >
+              <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      {status === 'error' && error && (
+        <p className="text-xs text-red-400 px-2 pb-2 -mt-1">{error}</p>
+      )}
+    </div>
+  );
 }
 
-export default App;
+export default Indicator;
 ```
 
 ## File: .eslintrc.cjs
@@ -459,13 +464,176 @@ module.exports = {
 }
 ```
 
+## File: src/content/App.tsx
+```typescript
+import { useState, useEffect, useCallback, useRef } from 'react';
+import Indicator from './Indicator';
+import type { Status } from './types';
+
+function App() {
+  const [status, setStatus] = useState<Status>('monitoring');
+  const [error, setError] = useState<string | null>(null);
+  const startTimeRef = useRef<number | null>(null);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const pausedTimeRef = useRef(0);
+  const pauseStartRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    let intervalId: number | undefined;
+
+    if (status === 'running') {
+      intervalId = window.setInterval(() => {
+        if (startTimeRef.current) {
+          const now = Date.now();
+          const totalElapsed =
+            now - startTimeRef.current - pausedTimeRef.current;
+          setElapsedTime(totalElapsed);
+        }
+      }, 1000);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [status]);
+
+  const handlePauseResume = useCallback(() => {
+    setStatus((currentStatus) => {
+      if (currentStatus === 'running') {
+        // Pausing
+        pauseStartRef.current = Date.now();
+        // Update elapsed time one last time before pausing interval
+        if (startTimeRef.current) {
+          setElapsedTime(
+            Date.now() - startTimeRef.current - pausedTimeRef.current
+          );
+        }
+        return 'paused';
+      }
+
+      if (currentStatus === 'paused') {
+        // Resuming
+        if (pauseStartRef.current) {
+          pausedTimeRef.current += Date.now() - pauseStartRef.current;
+          pauseStartRef.current = null;
+        }
+        return 'running';
+      }
+
+      return currentStatus;
+    });
+  }, []);
+
+  const checkState = useCallback(() => {
+    // When paused, we don't check for state changes.
+    if (status === 'paused') return;
+
+    try {
+      const stopButtonExists = !!document.querySelector<SVGRectElement>(
+        'rect[class*="stoppable-stop"]'
+      );
+
+      setStatus((prevStatus) => {
+        // Prevent checkState from overriding pause
+        if (prevStatus === 'paused') return 'paused';
+
+        const wasRunning = prevStatus === 'running';
+
+        if (wasRunning && !stopButtonExists) {
+          // State transition: running -> stopped
+          const endTime = Date.now();
+          const finalElapsedTime = startTimeRef.current
+            ? endTime - startTimeRef.current - pausedTimeRef.current
+            : 0;
+          setElapsedTime(finalElapsedTime < 0 ? 0 : finalElapsedTime);
+
+          console.log(
+            'AI Studio process finished. Playing sound and sending desktop notification.'
+          );
+          chrome.runtime.sendMessage({
+            type: 'processFinished',
+            durationMs: finalElapsedTime,
+          });
+          startTimeRef.current = null;
+          pausedTimeRef.current = 0;
+          pauseStartRef.current = null;
+          return 'stopped';
+        }
+
+        const newStatus = stopButtonExists ? 'running' : 'monitoring';
+
+        if (newStatus === 'running' && prevStatus !== 'running') {
+          // State transition: not running -> running
+          startTimeRef.current = Date.now();
+          pausedTimeRef.current = 0;
+          pauseStartRef.current = null;
+          setElapsedTime(0);
+        }
+
+        if (
+          prevStatus !== newStatus &&
+          !(prevStatus === 'stopped' && newStatus === 'monitoring')
+        ) {
+          console.log(
+            `AI Studio Notifier: State changed to ${
+              stopButtonExists ? 'Running' : 'Monitoring'
+            }`
+          );
+        }
+        // If we were stopped, and a new process hasn't started, stay stopped visually
+        // until a new run starts.
+        if (prevStatus === 'stopped' && !stopButtonExists) {
+          return 'stopped';
+        }
+
+        return newStatus;
+      });
+      setError(null);
+    } catch (e) {
+      console.error('AI Studio Notifier: Error during state check.', e);
+      setError('An error occurred during check.');
+      setStatus('error');
+    }
+  }, [status]);
+
+  useEffect(() => {
+    // Initial Check after a short delay
+    const timeoutId = setTimeout(checkState, 2000);
+
+    // Observer Setup
+    const observer = new MutationObserver(checkState);
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+    console.log(
+      'AI Studio Notifier: MutationObserver is now watching the page.'
+    );
+
+    return () => {
+      clearTimeout(timeoutId);
+      observer.disconnect();
+    };
+  }, [checkState]);
+
+  return (
+    <Indicator
+      status={status}
+      error={error}
+      elapsedTime={elapsedTime}
+      onPauseResume={handlePauseResume}
+    />
+  );
+}
+
+export default App;
+```
+
 ## File: src/background.ts
 ```typescript
-interface NotificationContext {
-  tabId: number;
-  windowId: number;
-  durationMs?: number | null;
-}
+import type { NotificationContext } from './types';
 
 // Context for notifications is stored in chrome.storage.local to survive
 // service worker termination. A `notification:` prefix is used for the key.

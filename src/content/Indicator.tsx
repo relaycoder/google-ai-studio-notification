@@ -1,35 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { useDrag } from './useDrag';
-import type { Status } from './App';
-
-interface IndicatorProps {
-  status: Status;
-  error: string | null;
-  elapsedTime: number;
-}
-
-const statusConfig: Record<Status, { bgColor: string; text: string; animate: boolean }> = {
-  monitoring: {
-    bgColor: 'bg-blue-500',
-    text: 'Monitoring',
-    animate: false,
-  },
-  running: {
-    bgColor: 'bg-green-500',
-    text: 'Process Running',
-    animate: true,
-  },
-  stopped: {
-    bgColor: 'bg-yellow-500',
-    text: 'Process Finished!',
-    animate: false,
-  },
-  error: {
-    bgColor: 'bg-red-500',
-    text: 'Error!',
-    animate: false,
-  },
-};
+import { statusConfig } from './constants';
+import type { IndicatorProps } from './types';
 
 function formatElapsedTime(ms: number): string {
   if (ms <= 0) return '00:00';
@@ -41,7 +13,12 @@ function formatElapsedTime(ms: number): string {
   return `${paddedMinutes}:${paddedSeconds}`;
 }
 
-function Indicator({ status, error, elapsedTime }: IndicatorProps) {
+function Indicator({
+  status,
+  error,
+  elapsedTime,
+  onPauseResume,
+}: IndicatorProps) {
   const indicatorRef = useRef<HTMLDivElement>(null);
   const { position, handleMouseDown } = useDrag(indicatorRef);
   const [isVisible, setIsVisible] = useState(true);
@@ -66,6 +43,7 @@ function Indicator({ status, error, elapsedTime }: IndicatorProps) {
   }
 
   const config = statusConfig[status];
+  const isPausable = status === 'running' || status === 'paused';
 
   return (
     <div
@@ -88,19 +66,63 @@ function Indicator({ status, error, elapsedTime }: IndicatorProps) {
             }`}
           ></span>
           <span className="text-sm font-medium">{config.text}</span>
-          {status === 'running' && (
+          {(status === 'running' ||
+            status === 'paused' ||
+            status === 'stopped') && (
             <span className="text-sm font-mono text-gray-300">
               {formatElapsedTime(elapsedTime)}
             </span>
           )}
         </div>
-        <button
-          onClick={() => setIsVisible(false)}
-          className="text-xs text-gray-400 hover:text-white cursor-pointer"
-          title="Hide Indicator"
-        >
-          &#x2715;
-        </button>
+        <div className="flex items-center">
+          {isPausable && (
+            <button
+              onClick={onPauseResume}
+              className="text-gray-400 hover:text-white cursor-pointer p-1 rounded-full"
+              title={status === 'running' ? 'Pause' : 'Resume'}
+            >
+              {status === 'running' ? (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="block"
+                >
+                  <path d="M14 19h4V5h-4v14zm-8 0h4V5H6v14z" />
+                </svg>
+              ) : (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="block"
+                >
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
+            </button>
+          )}
+          <button
+            onClick={() => setIsVisible(false)}
+            className="text-gray-400 hover:text-white cursor-pointer p-1 rounded-full"
+            title="Hide Indicator"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="block"
+            >
+              <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" />
+            </svg>
+          </button>
+        </div>
       </div>
       {status === 'error' && error && (
         <p className="text-xs text-red-400 px-2 pb-2 -mt-1">{error}</p>

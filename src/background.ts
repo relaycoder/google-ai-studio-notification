@@ -1,8 +1,4 @@
-interface NotificationContext {
-  tabId: number;
-  windowId: number;
-  durationMs?: number | null;
-}
+import type { NotificationContext } from './types';
 
 // Context for notifications is stored in chrome.storage.local to survive
 // service worker termination. A `notification:` prefix is used for the key.

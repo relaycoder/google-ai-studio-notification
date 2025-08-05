@@ -1,28 +1,27 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Indicator from './Indicator';
-
-export type Status = 'monitoring' | 'running' | 'stopped' | 'error';
+import type { Status } from './types';
 
 function App() {
   const [status, setStatus] = useState<Status>('monitoring');
   const [error, setError] = useState<string | null>(null);
   const startTimeRef = useRef<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
+  const pausedTimeRef = useRef(0);
+  const pauseStartRef = useRef<number | null>(null);
 
   useEffect(() => {
     let intervalId: number | undefined;
 
-    if (status === 'running' && startTimeRef.current) {
-      // Set initial time immediately
-      setElapsedTime(Date.now() - startTimeRef.current);
-
+    if (status === 'running') {
       intervalId = window.setInterval(() => {
         if (startTimeRef.current) {
-          setElapsedTime(Date.now() - startTimeRef.current);
+          const now = Date.now();
+          const totalElapsed =
+            now - startTimeRef.current - pausedTimeRef.current;
+          setElapsedTime(totalElapsed);
         }
       }, 1000);
-    } else {
-      setElapsedTime(0);
     }
 
     return () => {
@@ -32,25 +31,72 @@ function App() {
     };
   }, [status]);
 
+  const handlePauseResume = useCallback(() => {
+    setStatus((currentStatus) => {
+      if (currentStatus === 'running') {
+        // Pausing
+        pauseStartRef.current = Date.now();
+        // Update elapsed time one last time before pausing interval
+        if (startTimeRef.current) {
+          setElapsedTime(
+            Date.now() - startTimeRef.current - pausedTimeRef.current
+          );
+        }
+        return 'paused';
+      }
+
+      if (currentStatus === 'paused') {
+        // Resuming
+        if (pauseStartRef.current) {
+          pausedTimeRef.current += Date.now() - pauseStartRef.current;
+          pauseStartRef.current = null;
+        }
+        return 'running';
+      }
+
+      return currentStatus;
+    });
+  }, []);
+
   const checkState = useCallback(() => {
+    // When paused, we don't check for state changes.
+    if (status === 'paused') return;
+
     try {
       const stopButtonExists = !!document.querySelector<SVGRectElement>(
         'rect[class*="stoppable-stop"]'
       );
 
       setStatus((prevStatus) => {
+        // Prevent checkState from overriding pause
+        if (prevStatus === 'paused') return 'paused';
+
         const wasRunning = prevStatus === 'running';
+
         if (wasRunning && !stopButtonExists) {
           // State transition: running -> stopped
           const endTime = Date.now();
-          const durationMs = startTimeRef.current
-            ? endTime - startTimeRef.current
-            : null;
-          console.log(
-            'AI Studio process finished. Playing sound and sending desktop notification.'
-          );
-          chrome.runtime.sendMessage({ type: 'processFinished', durationMs });
+          const finalElapsedTime = startTimeRef.current
+            ? endTime - startTimeRef.current - pausedTimeRef.current
+            : 0;
+          setElapsedTime(finalElapsedTime < 0 ? 0 : finalElapsedTime);
+
+          if (finalElapsedTime >= 3000) {
+            console.log(
+              'AI Studio process finished. Sending desktop notification.'
+            );
+            chrome.runtime.sendMessage({
+              type: 'processFinished',
+              durationMs: finalElapsedTime,
+            });
+          } else {
+            console.log(
+              'AI Studio process finished in under 3 seconds. Skipping desktop notification.'
+            );
+          }
           startTimeRef.current = null;
+          pausedTimeRef.current = 0;
+          pauseStartRef.current = null;
           return 'stopped';
         }
 
@@ -59,6 +105,9 @@ function App() {
         if (newStatus === 'running' && prevStatus !== 'running') {
           // State transition: not running -> running
           startTimeRef.current = Date.now();
+          pausedTimeRef.current = 0;
+          pauseStartRef.current = null;
+          setElapsedTime(0);
         }
 
         if (
@@ -74,7 +123,7 @@ function App() {
         // If we were stopped, and a new process hasn't started, stay stopped visually
         // until a new run starts.
         if (prevStatus === 'stopped' && !stopButtonExists) {
-            return 'stopped';
+          return 'stopped';
         }
 
         return newStatus;
@@ -85,7 +134,7 @@ function App() {
       setError('An error occurred during check.');
       setStatus('error');
     }
-  }, []);
+  }, [status]);
 
   useEffect(() => {
     // Initial Check after a short delay
@@ -107,7 +156,14 @@ function App() {
     };
   }, [checkState]);
 
-  return <Indicator status={status} error={error} elapsedTime={elapsedTime} />;
+  return (
+    <Indicator
+      status={status}
+      error={error}
+      elapsedTime={elapsedTime}
+      onPauseResume={handlePauseResume}
+    />
+  );
 }
 
 export default App;
