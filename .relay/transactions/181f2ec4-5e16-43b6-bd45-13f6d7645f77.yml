@@ -1,0 +1,343 @@
+uuid: 181f2ec4-5e16-43b6-bd45-13f6d7645f77
+projectId: google-ai-studio-notification
+createdAt: '2025-08-05T04:24:29.195Z'
+linesAdded: 42
+linesRemoved: 2
+gitCommitMsg: 'feat: display running timer in indicator'
+promptSummary: >-
+  The user wants to add a timer to the floating indicator that shows how long a
+  process has been running.
+reasoning:
+  - 'To add a running timer to the indicator, I will perform the following steps:'
+  - '1.  **Modify `src/content/App.tsx`**:'
+  - >-
+    *   Introduce a new state variable, `elapsedTime`, to store the duration in
+    milliseconds since the process started.
+  - '*   Add a `useEffect` hook that listens for changes in the `status` state.'
+  - >-
+    *   When `status` becomes `'running'`, it will start a `setInterval` to
+    update `elapsedTime` every second.
+  - >-
+    *   When the status is not `'running'`, it will clear the interval and reset
+    `elapsedTime` to `0`.
+  - '*   Pass the `elapsedTime` state as a prop to the `Indicator` component.'
+  - '2.  **Modify `src/content/Indicator.tsx`**:'
+  - >-
+    *   Update the `IndicatorProps` interface to accept the new `elapsedTime`
+    prop.
+  - >-
+    *   Create a helper function, `formatElapsedTime`, to convert milliseconds
+    into a `MM:SS` string format.
+  - >-
+    *   When the `status` is `'running'`, display the formatted elapsed time
+    next to the status text. I'll use a monospaced font for the timer to prevent
+    the layout from shifting as the numbers change.
+  - >-
+    These changes will provide real-time feedback to the user on how long a
+    process has been running directly in the UI.
+operations:
+  - type: write
+    path: src/content/App.tsx
+    content: |-
+      <<<<<<< SEARCH
+      import { useState, useEffect, useCallback, useRef } from 'react';
+      import Indicator from './Indicator';
+
+      export type Status = 'monitoring' | 'running' | 'stopped' | 'error';
+
+      function App() {
+        const [status, setStatus] = useState<Status>('monitoring');
+        const [error, setError] = useState<string | null>(null);
+        const startTimeRef = useRef<number | null>(null);
+
+        const checkState = useCallback(() => {
+      =======
+      import { useState, useEffect, useCallback, useRef } from 'react';
+      import Indicator from './Indicator';
+
+      export type Status = 'monitoring' | 'running' | 'stopped' | 'error';
+
+      function App() {
+        const [status, setStatus] = useState<Status>('monitoring');
+        const [error, setError] = useState<string | null>(null);
+        const startTimeRef = useRef<number | null>(null);
+        const [elapsedTime, setElapsedTime] = useState(0);
+
+        useEffect(() => {
+          let intervalId: number | undefined;
+
+          if (status === 'running' && startTimeRef.current) {
+            // Set initial time immediately
+            setElapsedTime(Date.now() - startTimeRef.current);
+
+            intervalId = window.setInterval(() => {
+              if (startTimeRef.current) {
+                setElapsedTime(Date.now() - startTimeRef.current);
+              }
+            }, 1000);
+          } else {
+            setElapsedTime(0);
+          }
+
+          return () => {
+            if (intervalId) {
+              clearInterval(intervalId);
+            }
+          };
+        }, [status]);
+
+        const checkState = useCallback(() => {
+      >>>>>>> REPLACE
+      <<<<<<< SEARCH
+        return <Indicator status={status} error={error} />;
+      }
+      =======
+        return <Indicator status={status} error={error} elapsedTime={elapsedTime} />;
+      }
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+  - type: write
+    path: src/content/Indicator.tsx
+    content: |-
+      --- src/content/Indicator.tsx
+      +++ src/content/Indicator.tsx
+      @@ -2,8 +2,9 @@
+       import { useDrag } from './useDrag';
+       import type { Status } from './App';
+       
+       interface IndicatorProps {
+         status: Status;
+         error: string | null;
+      +  elapsedTime: number;
+       }
+       
+       const statusConfig: Record<Status, { bgColor: string; text: string; animate: boolean }> = {
+      @@ -29,7 +30,17 @@
+         },
+       };
+       
+      -function Indicator({ status, error }: IndicatorProps) {
+      +function formatElapsedTime(ms: number): string {
+      +  if (ms <= 0) return '00:00';
+      +  const totalSeconds = Math.floor(ms / 1000);
+      +  const minutes = Math.floor(totalSeconds / 60);
+      +  const seconds = totalSeconds % 60;
+      +  const paddedMinutes = String(minutes).padStart(2, '0');
+      +  const paddedSeconds = String(seconds).padStart(2, '0');
+      +  return `${paddedMinutes}:${paddedSeconds}`;
+      +}
+      +
+      +function Indicator({ status, error, elapsedTime }: IndicatorProps) {
+         const indicatorRef = useRef<HTMLDivElement>(null);
+         const { position, handleMouseDown } = useDrag(indicatorRef);
+         const [isVisible, setIsVisible] = useState(true);
+      @@ -71,6 +82,11 @@
+                     config.animate ? 'animate-pulse' : ''
+                   }`}
+                 ></span>
+                 <span className="text-sm font-medium">{config.text}</span>
+      +          {status === 'running' && (
+      +            <span className="text-sm font-mono text-gray-300">
+      +              {formatElapsedTime(elapsedTime)}
+      +            </span>
+      +          )}
+               </div>
+               <button
+                 onClick={() => setIsVisible(false)}
+    patchStrategy: new-unified
+snapshot:
+  src/content/App.tsx: |-
+    import { useState, useEffect, useCallback, useRef } from 'react';
+    import Indicator from './Indicator';
+
+    export type Status = 'monitoring' | 'running' | 'stopped' | 'error';
+
+    function App() {
+      const [status, setStatus] = useState<Status>('monitoring');
+      const [error, setError] = useState<string | null>(null);
+      const startTimeRef = useRef<number | null>(null);
+
+      const checkState = useCallback(() => {
+        try {
+          const stopButtonExists = !!document.querySelector<SVGRectElement>(
+            'rect[class*="stoppable-stop"]'
+          );
+
+          setStatus((prevStatus) => {
+            const wasRunning = prevStatus === 'running';
+            if (wasRunning && !stopButtonExists) {
+              // State transition: running -> stopped
+              const endTime = Date.now();
+              const durationMs = startTimeRef.current
+                ? endTime - startTimeRef.current
+                : null;
+              console.log(
+                'AI Studio process finished. Playing sound and sending desktop notification.'
+              );
+              chrome.runtime.sendMessage({ type: 'processFinished', durationMs });
+              startTimeRef.current = null;
+              return 'stopped';
+            }
+
+            const newStatus = stopButtonExists ? 'running' : 'monitoring';
+
+            if (newStatus === 'running' && prevStatus !== 'running') {
+              // State transition: not running -> running
+              startTimeRef.current = Date.now();
+            }
+
+            if (
+              prevStatus !== newStatus &&
+              !(prevStatus === 'stopped' && newStatus === 'monitoring')
+            ) {
+              console.log(
+                `AI Studio Notifier: State changed to ${
+                  stopButtonExists ? 'Running' : 'Monitoring'
+                }`
+              );
+            }
+            // If we were stopped, and a new process hasn't started, stay stopped visually
+            // until a new run starts.
+            if (prevStatus === 'stopped' && !stopButtonExists) {
+                return 'stopped';
+            }
+
+            return newStatus;
+          });
+          setError(null);
+        } catch (e) {
+          console.error('AI Studio Notifier: Error during state check.', e);
+          setError('An error occurred during check.');
+          setStatus('error');
+        }
+      }, []);
+
+      useEffect(() => {
+        // Initial Check after a short delay
+        const timeoutId = setTimeout(checkState, 2000);
+
+        // Observer Setup
+        const observer = new MutationObserver(checkState);
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true,
+        });
+        console.log(
+          'AI Studio Notifier: MutationObserver is now watching the page.'
+        );
+
+        return () => {
+          clearTimeout(timeoutId);
+          observer.disconnect();
+        };
+      }, [checkState]);
+
+      return <Indicator status={status} error={error} />;
+    }
+
+    export default App;
+  src/content/Indicator.tsx: >-
+    import { useRef, useEffect, useState } from 'react';
+
+    import { useDrag } from './useDrag';
+
+    import type { Status } from './App';
+
+
+    interface IndicatorProps {
+      status: Status;
+      error: string | null;
+    }
+
+
+    const statusConfig: Record<Status, { bgColor: string; text: string; animate:
+    boolean }> = {
+      monitoring: {
+        bgColor: 'bg-blue-500',
+        text: 'Monitoring',
+        animate: false,
+      },
+      running: {
+        bgColor: 'bg-green-500',
+        text: 'Process Running',
+        animate: true,
+      },
+      stopped: {
+        bgColor: 'bg-yellow-500',
+        text: 'Process Finished!',
+        animate: false,
+      },
+      error: {
+        bgColor: 'bg-red-500',
+        text: 'Error!',
+        animate: false,
+      },
+    };
+
+
+    function Indicator({ status, error }: IndicatorProps) {
+      const indicatorRef = useRef<HTMLDivElement>(null);
+      const { position, handleMouseDown } = useDrag(indicatorRef);
+      const [isVisible, setIsVisible] = useState(true);
+      const audioRef = useRef<HTMLAudioElement | null>(null);
+
+      useEffect(() => {
+        // Preload audio element when component mounts
+        const soundUrl = chrome.runtime.getURL('notification.mp3');
+        audioRef.current = new Audio(soundUrl);
+      }, []);
+
+      useEffect(() => {
+        if (status === 'stopped') {
+          audioRef.current
+            ?.play()
+            .catch((err) => console.error('Audio play failed: ', err));
+        }
+      }, [status]);
+
+      if (!isVisible) {
+        return null;
+      }
+
+      const config = statusConfig[status];
+
+      return (
+        <div
+          ref={indicatorRef}
+          className="fixed top-0 left-0 z-[99999] rounded-lg shadow-lg text-white font-sans select-none"
+          style={{
+            transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
+            backgroundColor: 'rgba(20, 20, 20, 0.8)',
+            backdropFilter: 'blur(4px)',
+          }}
+        >
+          <div
+            className="flex items-center gap-3 p-2 cursor-grab"
+            onMouseDown={handleMouseDown}
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-3 h-3 rounded-full ${config.bgColor} ${
+                  config.animate ? 'animate-pulse' : ''
+                }`}
+              ></span>
+              <span className="text-sm font-medium">{config.text}</span>
+            </div>
+            <button
+              onClick={() => setIsVisible(false)}
+              className="text-xs text-gray-400 hover:text-white cursor-pointer"
+              title="Hide Indicator"
+            >
+              &#x2715;
+            </button>
+          </div>
+          {status === 'error' && error && (
+            <p className="text-xs text-red-400 px-2 pb-2 -mt-1">{error}</p>
+          )}
+        </div>
+      );
+    }
+
+
+    export default Indicator;
+approved: true

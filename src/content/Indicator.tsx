@@ -5,6 +5,7 @@ import type { Status } from './App';
 interface IndicatorProps {
   status: Status;
   error: string | null;
+  elapsedTime: number;
 }
 
 const statusConfig: Record<Status, { bgColor: string; text: string; animate: boolean }> = {
@@ -30,7 +31,17 @@ const statusConfig: Record<Status, { bgColor: string; text: string; animate: boo
   },
 };
 
-function Indicator({ status, error }: IndicatorProps) {
+function formatElapsedTime(ms: number): string {
+  if (ms <= 0) return '00:00';
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const paddedMinutes = String(minutes).padStart(2, '0');
+  const paddedSeconds = String(seconds).padStart(2, '0');
+  return `${paddedMinutes}:${paddedSeconds}`;
+}
+
+function Indicator({ status, error, elapsedTime }: IndicatorProps) {
   const indicatorRef = useRef<HTMLDivElement>(null);
   const { position, handleMouseDown } = useDrag(indicatorRef);
   const [isVisible, setIsVisible] = useState(true);
@@ -77,6 +88,11 @@ function Indicator({ status, error }: IndicatorProps) {
             }`}
           ></span>
           <span className="text-sm font-medium">{config.text}</span>
+          {status === 'running' && (
+            <span className="text-sm font-mono text-gray-300">
+              {formatElapsedTime(elapsedTime)}
+            </span>
+          )}
         </div>
         <button
           onClick={() => setIsVisible(false)}

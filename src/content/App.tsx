@@ -7,6 +7,30 @@ function App() {
   const [status, setStatus] = useState<Status>('monitoring');
   const [error, setError] = useState<string | null>(null);
   const startTimeRef = useRef<number | null>(null);
+  const [elapsedTime, setElapsedTime] = useState(0);
+
+  useEffect(() => {
+    let intervalId: number | undefined;
+
+    if (status === 'running' && startTimeRef.current) {
+      // Set initial time immediately
+      setElapsedTime(Date.now() - startTimeRef.current);
+
+      intervalId = window.setInterval(() => {
+        if (startTimeRef.current) {
+          setElapsedTime(Date.now() - startTimeRef.current);
+        }
+      }, 1000);
+    } else {
+      setElapsedTime(0);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [status]);
 
   const checkState = useCallback(() => {
     try {
@@ -83,7 +107,7 @@ function App() {
     };
   }, [checkState]);
 
-  return <Indicator status={status} error={error} />;
+  return <Indicator status={status} error={error} elapsedTime={elapsedTime} />;
 }
 
 export default App;

@@ -1,3 +1,7 @@
+in floating indicator add time took timer so user know current time while processing
+
+===
+
 show time took also in Your process has finished notification.
 
 ===
