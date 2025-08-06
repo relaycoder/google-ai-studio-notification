@@ -1,5 +1,7 @@
 # Directory Structure
 ```
+public/
+  sites.json
 src/
   content/
     App.tsx
@@ -20,6 +22,33 @@ vite.config.ts
 ```
 
 # Files
+
+## File: public/sites.json
+```json
+[
+  {
+    "name": "Google AI Studio",
+    "matches": [
+      "https://aistudio.google.com/*"
+    ],
+    "selector": "rect[class*='stoppable-stop']"
+  },
+  {
+    "name": "Kimi Chat",
+    "matches": [
+      "https://www.kimi.com/chat/*"
+    ],
+    "selector": "button[data-testid='stop-button']"
+  },
+  {
+    "name": "Qwen Chat",
+    "matches": [
+      "https://chat.qwen.ai/c/*"
+    ],
+    "selector": "button > span[aria-label='stop']"
+  }
+]
+```
 
 ## File: src/content/index.tsx
 ```typescript
@@ -459,76 +488,6 @@ module.exports = {
 }
 ```
 
-## File: src/content/constants.ts
-```typescript
-import type { Status, ConnectionStatus } from '../types';
-
-export const STOP_BUTTON_SELECTOR = 'rect[class*="stoppable-stop"]';
-
-export const statusConfig: Record<
-  Status,
-  { bgColor: string; text: string; animate: boolean }
-> = {
-  monitoring: {
-    bgColor: 'bg-blue-500',
-    text: 'Monitoring',
-    animate: false,
-  },
-  running: {
-    bgColor: 'bg-green-500',
-    text: 'Process Running',
-    animate: true,
-  },
-  stopped: {
-    bgColor: 'bg-yellow-500',
-    text: 'Process Finished!',
-    animate: false,
-  },
-  error: {
-    bgColor: 'bg-red-500',
-    text: 'Error!',
-    animate: false,
-  },
-  paused: {
-    bgColor: 'bg-orange-500',
-    text: 'Paused',
-    animate: false,
-  },
-  standby: {
-    bgColor: 'bg-gray-500',
-    text: 'Standby',
-    animate: false,
-  },
-};
-
-export const connectionStatusConfig: Record<
-  ConnectionStatus,
-  { bgColor: string; text: string; animate: boolean }
-> = {
-  connecting: {
-    bgColor: 'bg-yellow-500',
-    text: 'Connecting...',
-    animate: true,
-  },
-  connected: {
-    // This is a placeholder, as 'connected' status will use the run status config.
-    bgColor: '',
-    text: '',
-    animate: false,
-  },
-  disconnected: {
-    bgColor: 'bg-orange-500',
-    text: 'Disconnected. Reconnecting...',
-    animate: true,
-  },
-  invalidated: {
-    bgColor: 'bg-red-500',
-    text: 'Error: Please reload tab',
-    animate: false,
-  },
-};
-```
-
 ## File: src/types.ts
 ```typescript
 export type Status =
@@ -644,6 +603,74 @@ export interface IndicatorProps {
   onClose: () => void;
   onNavigate: (tabId: number, windowId: number) => void;
 }
+```
+
+## File: src/content/constants.ts
+```typescript
+import type { Status, ConnectionStatus } from '../types';
+
+export const statusConfig: Record<
+  Status,
+  { bgColor: string; text: string; animate: boolean }
+> = {
+  monitoring: {
+    bgColor: 'bg-blue-500',
+    text: 'Monitoring',
+    animate: false,
+  },
+  running: {
+    bgColor: 'bg-green-500',
+    text: 'Process Running',
+    animate: true,
+  },
+  stopped: {
+    bgColor: 'bg-yellow-500',
+    text: 'Process Finished!',
+    animate: false,
+  },
+  error: {
+    bgColor: 'bg-red-500',
+    text: 'Error!',
+    animate: false,
+  },
+  paused: {
+    bgColor: 'bg-orange-500',
+    text: 'Paused',
+    animate: false,
+  },
+  standby: {
+    bgColor: 'bg-gray-500',
+    text: 'Standby',
+    animate: false,
+  },
+};
+
+export const connectionStatusConfig: Record<
+  ConnectionStatus,
+  { bgColor: string; text: string; animate: boolean }
+> = {
+  connecting: {
+    bgColor: 'bg-yellow-500',
+    text: 'Connecting...',
+    animate: true,
+  },
+  connected: {
+    // This is a placeholder, as 'connected' status will use the run status config.
+    bgColor: '',
+    text: '',
+    animate: false,
+  },
+  disconnected: {
+    bgColor: 'bg-orange-500',
+    text: 'Disconnected. Reconnecting...',
+    animate: true,
+  },
+  invalidated: {
+    bgColor: 'bg-red-500',
+    text: 'Error: Please reload tab',
+    animate: false,
+  },
+};
 ```
 
 ## File: src/content/Indicator.tsx
@@ -1583,7 +1610,6 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 ```typescript
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Indicator from './Indicator';
-import { STOP_BUTTON_SELECTOR } from './constants';
 import type { GlobalState, ConnectionStatus } from '../types';
 
 /**
@@ -1614,8 +1640,52 @@ function App() {
     useState<ConnectionStatus>('connecting');
   const lastKnownStopButtonState = useRef<boolean>(false);
   const portRef = useRef<chrome.runtime.Port | null>(null);
+  const [activeSiteSelector, setActiveSiteSelector] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
+    fetch(chrome.runtime.getURL('sites.json'))
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then((sites: { matches: string[]; selector: string }[]) => {
+        const currentUrl = window.location.href;
+        const matchedSite = sites.find((site) =>
+          site.matches.some((pattern) => {
+            // Simple wildcard to regex conversion.
+            // e.g. "https://*.example.com/*" becomes /^https:\/\/.*\.example\.com\/.*$/
+            const regex = new RegExp(
+              '^' +
+                pattern
+                  .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+                  .replace(/\*/g, '.*') +
+                '$'
+            );
+            return regex.test(currentUrl);
+          })
+        );
+
+        if (matchedSite) {
+          setActiveSiteSelector(matchedSite.selector);
+        } else {
+          // If no site matches, this content script does nothing.
+          // console.log('AI Studio Notifier: Current site not supported.');
+        }
+      })
+      .catch((error) =>
+        console.error('AI Studio Notifier: Error loading sites.json', error)
+      );
+  }, []);
+
+  useEffect(() => {
+    if (!activeSiteSelector) {
+      return; // Do nothing if on an unsupported site.
+    }
+
     let port: chrome.runtime.Port | null = null;
     let isInvalidated = false;
     let reconnectTimeoutId: number | undefined;
@@ -1699,7 +1769,7 @@ function App() {
       }
       portRef.current = null;
     };
-  }, []); // This effect runs only once on component mount
+  }, [activeSiteSelector]); // This effect now depends on the site being supported
 
   const postMessage = useCallback((message: any) => {
     if (!portRef.current) {
@@ -1721,7 +1791,7 @@ function App() {
   }, []);
 
   const checkState = useCallback(() => {
-    if (!tabId) return;
+    if (!tabId || !activeSiteSelector) return;
     const currentTabState = globalState[tabId];
     if (
       !currentTabState ||
@@ -1732,7 +1802,7 @@ function App() {
     }
 
     try {
-      const stopButtonExists = !!document.querySelector(STOP_BUTTON_SELECTOR);
+      const stopButtonExists = !!document.querySelector(activeSiteSelector);
       if (stopButtonExists !== lastKnownStopButtonState.current) {
         lastKnownStopButtonState.current = stopButtonExists;
         if (stopButtonExists) {
@@ -1745,10 +1815,12 @@ function App() {
       console.error('AI Studio Notifier: Error during state check.', e);
       postMessage({ type: 'error', error: 'An error occurred during check.' });
     }
-  }, [globalState, tabId, postMessage]);
+  }, [globalState, tabId, postMessage, activeSiteSelector]);
 
   useEffect(() => {
-    if (!tabId) return;
+    // Do not run observer if the site is not supported, or tabId is not yet known.
+    if (!tabId || !activeSiteSelector) return;
+
     const currentTabState = globalState[tabId];
     if (
       currentTabState?.status === 'paused' ||
@@ -1765,7 +1837,7 @@ function App() {
       clearTimeout(timeoutId);
       observer.disconnect();
     };
-  }, [checkState, tabId, globalState]);
+  }, [checkState, tabId, globalState, activeSiteSelector]);
 
   const handlePauseResume = useCallback(
     () => postMessage({ type: 'pauseResume' }),
@@ -1782,7 +1854,7 @@ function App() {
     [postMessage]
   );
 
-  if (!tabId || !globalState[tabId]?.isVisible) {
+  if (!activeSiteSelector || !tabId || !globalState[tabId]?.isVisible) {
     return null;
   }
 

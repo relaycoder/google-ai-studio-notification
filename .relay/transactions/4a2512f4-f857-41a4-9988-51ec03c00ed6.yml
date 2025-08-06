@@ -1,0 +1,67 @@
+uuid: 4a2512f4-f857-41a4-9988-51ec03c00ed6
+projectId: google-ai-studio-notification
+createdAt: '2025-08-06T21:38:45.584Z'
+linesAdded: 1
+linesRemoved: 1
+gitCommitMsg: 'fix(kimi): update selector for running state'
+promptSummary: >-
+  The user requested an update to the Kimi Chat selector to correctly identify
+  the 'running' state. The previous selector was outdated. Based on the provided
+  SVG element details, the distinguishing feature for the running state is an
+  SVG with the attribute `name="stop"`. I have updated the selector in
+  `public/sites.json` to `svg[name='stop']` to reflect this.
+reasoning:
+  - >-
+    Based on the information you provided about the Kimi Chat interface, the
+    previous selector for the stop button is no longer correct. I will update
+    `public/sites.json` to use the `name` attribute of the SVG icon to detect
+    when a process is running. The new selector will target `svg[name='stop']`,
+    which accurately reflects the state you described.
+operations:
+  - type: write
+    path: public/sites.json
+    content: |-
+      <<<<<<< SEARCH
+        {
+          "name": "Kimi Chat",
+          "matches": [
+            "https://www.kimi.com/chat/*"
+          ],
+          "selector": "button[data-testid='stop-button']"
+        },
+      =======
+        {
+          "name": "Kimi Chat",
+          "matches": [
+            "https://www.kimi.com/chat/*"
+          ],
+          "selector": "svg[name='stop']"
+        },
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+snapshot:
+  public/sites.json: |-
+    [
+      {
+        "name": "Google AI Studio",
+        "matches": [
+          "https://aistudio.google.com/*"
+        ],
+        "selector": "rect[class*='stoppable-stop']"
+      },
+      {
+        "name": "Kimi Chat",
+        "matches": [
+          "https://www.kimi.com/chat/*"
+        ],
+        "selector": "button[data-testid='stop-button']"
+      },
+      {
+        "name": "Qwen Chat",
+        "matches": [
+          "https://chat.qwen.ai/c/*"
+        ],
+        "selector": "button > span[aria-label='stop']"
+      }
+    ]
+approved: true

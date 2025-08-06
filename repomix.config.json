@@ -26,6 +26,7 @@
     // "README.md",
     "package.json",
     "tsconfig.json",
+    "public/sites.json",
     "src",
     ".eslintrc.cjs",
     ".prettierrc.json",
