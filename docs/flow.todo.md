@@ -1,3 +1,17 @@
+site not detected no floating indicator
+
+https://www.kimi.com/chat/d28sgm3lmiu8ftfp82h0
+
+https://www.kimi.com/
+
+but google ai studio is fine
+
+==
+
+after using site.json the floating indicator is not showing likely its not triggered
+
+===
+
 for kimi
 
 the button state are

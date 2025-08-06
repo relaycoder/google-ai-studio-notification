@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Indicator from './Indicator';
+import { sites } from './sites';
 import type { GlobalState, ConnectionStatus } from '../types';
 
 /**
@@ -34,41 +35,48 @@ function App() {
     null
   );
 
+  // This effect detects the active site and handles client-side navigations in SPAs.
   useEffect(() => {
-    fetch(chrome.runtime.getURL('sites.json'))
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then((sites: { matches: string[]; selector: string }[]) => {
-        const currentUrl = window.location.href;
-        const matchedSite = sites.find((site) =>
-          site.matches.some((pattern) => {
-            // Simple wildcard to regex conversion.
-            // e.g. "https://*.example.com/*" becomes /^https:\/\/.*\.example\.com\/.*$/
-            const regex = new RegExp(
-              '^' +
-                pattern
-                  .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-                  .replace(/\*/g, '.*') +
-                '$'
-            );
-            return regex.test(currentUrl);
-          })
-        );
+    let lastUrl = '';
 
-        if (matchedSite) {
-          setActiveSiteSelector(matchedSite.selector);
-        } else {
-          // If no site matches, this content script does nothing.
-          // console.log('AI Studio Notifier: Current site not supported.');
-        }
-      })
-      .catch((error) =>
-        console.error('AI Studio Notifier: Error loading sites.json', error)
+    const checkSite = () => {
+      if (window.location.href === lastUrl) {
+        return;
+      }
+      lastUrl = window.location.href;
+
+      const matchedSite = sites.find((site) =>
+        site.matches.some((pattern) => {
+          const regex = new RegExp(
+            '^' +
+              pattern
+                .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+                .replace(/\*/g, '.*') +
+              '$'
+          );
+          return regex.test(lastUrl);
+        })
       );
+
+      setActiveSiteSelector((prevSelector) => {
+        const newSelector = matchedSite ? matchedSite.selector : null;
+        return newSelector === prevSelector ? prevSelector : newSelector;
+      });
+    };
+
+    // Initial check
+    checkSite();
+
+    // A MutationObserver is a good way to detect SPA navigations.
+    const observer = new MutationObserver(checkSite);
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+
+    return () => {
+      observer.disconnect();
+    };
   }, []);
 
   useEffect(() => {

@@ -1,13 +1,12 @@
 # Directory Structure
 ```
-public/
-  sites.json
 src/
   content/
     App.tsx
     constants.ts
     index.tsx
     Indicator.tsx
+    sites.ts
     style.css
     useMovable.ts
   background.ts
@@ -23,31 +22,31 @@ vite.config.ts
 
 # Files
 
-## File: public/sites.json
-```json
-[
+## File: src/content/sites.ts
+```typescript
+export interface Site {
+  name: string;
+  matches: string[];
+  selector: string;
+}
+
+export const sites: Site[] = [
   {
-    "name": "Google AI Studio",
-    "matches": [
-      "https://aistudio.google.com/*"
-    ],
-    "selector": "rect[class*='stoppable-stop']"
+    name: 'Google AI Studio',
+    matches: ['https://aistudio.google.com/*'],
+    selector: "rect[class*='stoppable-stop']",
   },
   {
-    "name": "Kimi Chat",
-    "matches": [
-      "https://www.kimi.com/chat/*"
-    ],
-    "selector": "button[data-testid='stop-button']"
+    name: 'Kimi Chat',
+    matches: ['https://www.kimi.com/chat/*', 'https://kimi.com/chat/*'],
+    selector: "svg[name='stop']",
   },
   {
-    "name": "Qwen Chat",
-    "matches": [
-      "https://chat.qwen.ai/c/*"
-    ],
-    "selector": "button > span[aria-label='stop']"
-  }
-]
+    name: 'Qwen Chat',
+    matches: ['https://chat.qwen.ai/c/*'],
+    selector: "button > span[aria-label='stop']",
+  },
+];
 ```
 
 ## File: src/content/index.tsx
@@ -1610,6 +1609,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 ```typescript
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Indicator from './Indicator';
+import { sites } from './sites';
 import type { GlobalState, ConnectionStatus } from '../types';
 
 /**
@@ -1644,41 +1644,48 @@ function App() {
     null
   );
 
+  // This effect detects the active site and handles client-side navigations in SPAs.
   useEffect(() => {
-    fetch(chrome.runtime.getURL('sites.json'))
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then((sites: { matches: string[]; selector: string }[]) => {
-        const currentUrl = window.location.href;
-        const matchedSite = sites.find((site) =>
-          site.matches.some((pattern) => {
-            // Simple wildcard to regex conversion.
-            // e.g. "https://*.example.com/*" becomes /^https:\/\/.*\.example\.com\/.*$/
-            const regex = new RegExp(
-              '^' +
-                pattern
-                  .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-                  .replace(/\*/g, '.*') +
-                '$'
-            );
-            return regex.test(currentUrl);
-          })
-        );
+    let lastUrl = '';
 
-        if (matchedSite) {
-          setActiveSiteSelector(matchedSite.selector);
-        } else {
-          // If no site matches, this content script does nothing.
-          // console.log('AI Studio Notifier: Current site not supported.');
-        }
-      })
-      .catch((error) =>
-        console.error('AI Studio Notifier: Error loading sites.json', error)
+    const checkSite = () => {
+      if (window.location.href === lastUrl) {
+        return;
+      }
+      lastUrl = window.location.href;
+
+      const matchedSite = sites.find((site) =>
+        site.matches.some((pattern) => {
+          const regex = new RegExp(
+            '^' +
+              pattern
+                .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+                .replace(/\*/g, '.*') +
+              '$'
+          );
+          return regex.test(lastUrl);
+        })
       );
+
+      setActiveSiteSelector((prevSelector) => {
+        const newSelector = matchedSite ? matchedSite.selector : null;
+        return newSelector === prevSelector ? prevSelector : newSelector;
+      });
+    };
+
+    // Initial check
+    checkSite();
+
+    // A MutationObserver is a good way to detect SPA navigations.
+    const observer = new MutationObserver(checkSite);
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+
+    return () => {
+      observer.disconnect();
+    };
   }, []);
 
   useEffect(() => {
