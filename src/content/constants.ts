@@ -1,7 +1,5 @@
 import type { Status, ConnectionStatus } from '../types';
 
-export const STOP_BUTTON_SELECTOR = 'rect[class*="stoppable-stop"]';
-
 export const statusConfig: Record<
   Status,
   { bgColor: string; text: string; animate: boolean }

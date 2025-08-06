@@ -1,3 +1,7 @@
+we need configurable constant from yaml file of list web and target element selector because the page is not only ai studio but also https://www.kimi.com/chat/* https://chat.qwen.ai/c/*
+
+===
+
 the element target should be in constants.ts
 
 ===

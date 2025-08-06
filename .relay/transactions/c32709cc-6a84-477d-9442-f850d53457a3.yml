@@ -1,0 +1,609 @@
+uuid: c32709cc-6a84-477d-9442-f850d53457a3
+projectId: google-ai-studio-notification
+createdAt: '2025-08-06T21:18:45.554Z'
+linesAdded: 76
+linesRemoved: 10
+gitCommitMsg: 'feat: Make target sites and selectors configurable'
+promptSummary: >-
+  The user wants to make the extension configurable for different websites by
+  using a config file that specifies URL patterns and CSS selectors for the stop
+  button, instead of having a hardcoded selector for only Google AI Studio.
+reasoning:
+  - >-
+    Hello! As anton, your expert AI programmer, I've analyzed your request to
+    make the target website and element selector configurable. Here are the
+    necessary modifications to implement this feature.
+  - '### Step-by-step reasoning:'
+  - >-
+    1.  **Create `public/sites.json`**: I'll add a new JSON configuration file
+    in a `public` directory. This file will hold an array of supported sites,
+    each with URL match patterns and the specific CSS selector for its "stop"
+    button. This makes the extension easily configurable without changing the
+    code. Vite is already configured to include files from the `public`
+    directory in the extension's root.
+  - >-
+    2.  **Remove Hardcoded Selector**: I will remove the `STOP_BUTTON_SELECTOR`
+    constant from `src/content/constants.ts` since this will now be loaded
+    dynamically from `public/sites.json`.
+  - '3.  **Update `App.tsx`**: This is the main part of the change.'
+  - >-
+    *   The `App` component will now fetch and parse `public/sites.json` when it
+    first loads.
+  - >-
+    *   It will match the current page's URL against the `matches` patterns in
+    the configuration file.
+  - >-
+    *   If a match is found, the content script will proceed to initialize and
+    use the corresponding selector. If no match is found, the script will remain
+    inactive on that page.
+  - >-
+    *   The core logic for connecting to the background script and observing DOM
+    changes will only execute if the current site is supported.
+  - >-
+    *   The `checkState` function, which looks for the stop button, will use the
+    selector loaded from the configuration file.
+  - >-
+    These changes will make your extension flexible and easy to adapt for other
+    websites like Kimi Chat and Qwen Chat as you requested.
+  - 'Here are the code patches:'
+  - I'll start by creating the new configuration file.
+  - Next, I'll remove the old constant.
+  - Finally, I'll update the main application logic in `App.tsx`.
+  - '---'
+operations:
+  - type: write
+    path: public/sites.json
+    content: |-
+      [
+        {
+          "name": "Google AI Studio",
+          "matches": [
+            "https://aistudio.google.com/*"
+          ],
+          "selector": "rect[class*='stoppable-stop']"
+        },
+        {
+          "name": "Kimi Chat",
+          "matches": [
+            "https://www.kimi.com/chat/*"
+          ],
+          "selector": "button[data-testid='stop-button']"
+        },
+        {
+          "name": "Qwen Chat",
+          "matches": [
+            "https://chat.qwen.ai/c/*"
+          ],
+          "selector": "button > span[aria-label='stop']"
+        }
+      ]
+    patchStrategy: replace
+  - type: write
+    path: src/content/constants.ts
+    content: |-
+      --- src/content/constants.ts
+      +++ src/content/constants.ts
+      @@ -1,5 +1,3 @@
+       import type { Status, ConnectionStatus } from '../types';
+       
+      -export const STOP_BUTTON_SELECTOR = 'rect[class*="stoppable-stop"]';
+      -
+       export const statusConfig: Record<
+         Status,
+         { bgColor: string; text: string; animate: boolean }
+    patchStrategy: new-unified
+  - type: write
+    path: src/content/App.tsx
+    content: |-
+      <<<<<<< SEARCH
+      import { useState, useEffect, useCallback, useRef } from 'react';
+      import Indicator from './Indicator';
+      import { STOP_BUTTON_SELECTOR } from './constants';
+      import type { GlobalState, ConnectionStatus } from '../types';
+      =======
+      import { useState, useEffect, useCallback, useRef } from 'react';
+      import Indicator from './Indicator';
+      import type { GlobalState, ConnectionStatus } from '../types';
+      >>>>>>> REPLACE
+      <<<<<<< SEARCH
+      function App() {
+        const [tabId, setTabId] = useState<number | null>(null);
+        const [globalState, setGlobalState] = useState<GlobalState>({});
+        const [connectionStatus, setConnectionStatus] =
+          useState<ConnectionStatus>('connecting');
+        const lastKnownStopButtonState = useRef<boolean>(false);
+        const portRef = useRef<chrome.runtime.Port | null>(null);
+
+        useEffect(() => {
+          let port: chrome.runtime.Port | null = null;
+      =======
+      function App() {
+        const [tabId, setTabId] = useState<number | null>(null);
+        const [globalState, setGlobalState] = useState<GlobalState>({});
+        const [connectionStatus, setConnectionStatus] =
+          useState<ConnectionStatus>('connecting');
+        const lastKnownStopButtonState = useRef<boolean>(false);
+        const portRef = useRef<chrome.runtime.Port | null>(null);
+        const [activeSiteSelector, setActiveSiteSelector] = useState<string | null>(
+          null
+        );
+
+        useEffect(() => {
+          fetch(chrome.runtime.getURL('sites.json'))
+            .then((response) => {
+              if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+              }
+              return response.json();
+            })
+            .then((sites: { matches: string[]; selector: string }[]) => {
+              const currentUrl = window.location.href;
+              const matchedSite = sites.find((site) =>
+                site.matches.some((pattern) => {
+                  // Simple wildcard to regex conversion.
+                  // e.g. "https://*.example.com/*" becomes /^https:\/\/.*\.example\.com\/.*$/
+                  const regex = new RegExp(
+                    '^' +
+                      pattern
+                        .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+                        .replace(/\*/g, '.*') +
+                      '$'
+                  );
+                  return regex.test(currentUrl);
+                })
+              );
+
+              if (matchedSite) {
+                setActiveSiteSelector(matchedSite.selector);
+              } else {
+                // If no site matches, this content script does nothing.
+                // console.log('AI Studio Notifier: Current site not supported.');
+              }
+            })
+            .catch((error) =>
+              console.error('AI Studio Notifier: Error loading sites.json', error)
+            );
+        }, []);
+
+        useEffect(() => {
+          if (!activeSiteSelector) {
+            return; // Do nothing if on an unsupported site.
+          }
+
+          let port: chrome.runtime.Port | null = null;
+      >>>>>>> REPLACE
+      <<<<<<< SEARCH
+          let isInvalidated = false;
+          let reconnectTimeoutId: number | undefined;
+
+          function connect() {
+            // Don't try to connect if the context is known to be invalid
+            if (isInvalidated) return;
+            setConnectionStatus('connecting');
+
+            try {
+      =======
+          let isInvalidated = false;
+          let reconnectTimeoutId: number | undefined;
+
+          function connect() {
+            // Don't try to connect if the context is known to be invalid
+            if (isInvalidated) return;
+            setConnectionStatus('connecting');
+
+            try {
+      >>>>>>> REPLACE
+      <<<<<<< SEARCH
+            }
+            portRef.current = null;
+          };
+        }, []); // This effect runs only once on component mount
+
+        const postMessage = useCallback((message: any) => {
+      =======
+            }
+            portRef.current = null;
+          };
+        }, [activeSiteSelector]); // This effect now depends on the site being supported
+
+        const postMessage = useCallback((message: any) => {
+      >>>>>>> REPLACE
+      <<<<<<< SEARCH
+        const checkState = useCallback(() => {
+          if (!tabId) return;
+          const currentTabState = globalState[tabId];
+          if (
+            !currentTabState ||
+            currentTabState.status === 'paused' ||
+            currentTabState.status === 'standby'
+          ) {
+            return;
+          }
+
+          try {
+            const stopButtonExists = !!document.querySelector(STOP_BUTTON_SELECTOR);
+            if (stopButtonExists !== lastKnownStopButtonState.current) {
+              lastKnownStopButtonState.current = stopButtonExists;
+              if (stopButtonExists) {
+                postMessage({ type: 'startRun', runName: captureRunContext() });
+              } else {
+                postMessage({ type: 'stopRun' });
+              }
+            }
+          } catch (e) {
+            console.error('AI Studio Notifier: Error during state check.', e);
+            postMessage({ type: 'error', error: 'An error occurred during check.' });
+          }
+        }, [globalState, tabId, postMessage]);
+
+        useEffect(() => {
+          if (!tabId) return;
+          const currentTabState = globalState[tabId];
+          if (
+            currentTabState?.status === 'paused' ||
+            currentTabState?.status === 'standby'
+          ) {
+            return;
+          }
+
+          const timeoutId = setTimeout(checkState, 1000);
+          const observer = new MutationObserver(checkState);
+          observer.observe(document.body, { childList: true, subtree: true });
+
+          return () => {
+            clearTimeout(timeoutId);
+            observer.disconnect();
+          };
+        }, [checkState, tabId, globalState]);
+      =======
+        const checkState = useCallback(() => {
+          if (!tabId || !activeSiteSelector) return;
+          const currentTabState = globalState[tabId];
+          if (
+            !currentTabState ||
+            currentTabState.status === 'paused' ||
+            currentTabState.status === 'standby'
+          ) {
+            return;
+          }
+
+          try {
+            const stopButtonExists = !!document.querySelector(activeSiteSelector);
+            if (stopButtonExists !== lastKnownStopButtonState.current) {
+              lastKnownStopButtonState.current = stopButtonExists;
+              if (stopButtonExists) {
+                postMessage({ type: 'startRun', runName: captureRunContext() });
+              } else {
+                postMessage({ type: 'stopRun' });
+              }
+            }
+          } catch (e) {
+            console.error('AI Studio Notifier: Error during state check.', e);
+            postMessage({ type: 'error', error: 'An error occurred during check.' });
+          }
+        }, [globalState, tabId, postMessage, activeSiteSelector]);
+
+        useEffect(() => {
+          // Do not run observer if the site is not supported, or tabId is not yet known.
+          if (!tabId || !activeSiteSelector) return;
+
+          const currentTabState = globalState[tabId];
+          if (
+            currentTabState?.status === 'paused' ||
+            currentTabState?.status === 'standby'
+          ) {
+            return;
+          }
+
+          const timeoutId = setTimeout(checkState, 1000);
+          const observer = new MutationObserver(checkState);
+          observer.observe(document.body, { childList: true, subtree: true });
+
+          return () => {
+            clearTimeout(timeoutId);
+            observer.disconnect();
+          };
+        }, [checkState, tabId, globalState, activeSiteSelector]);
+      >>>>>>> REPLACE
+      <<<<<<< SEARCH
+        if (!tabId || !globalState[tabId]?.isVisible) {
+          return null;
+        }
+      =======
+        if (!activeSiteSelector || !tabId || !globalState[tabId]?.isVisible) {
+          return null;
+        }
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+snapshot:
+  public/sites.json: null
+  src/content/constants.ts: |-
+    import type { Status, ConnectionStatus } from '../types';
+
+    export const STOP_BUTTON_SELECTOR = 'rect[class*="stoppable-stop"]';
+
+    export const statusConfig: Record<
+      Status,
+      { bgColor: string; text: string; animate: boolean }
+    > = {
+      monitoring: {
+        bgColor: 'bg-blue-500',
+        text: 'Monitoring',
+        animate: false,
+      },
+      running: {
+        bgColor: 'bg-green-500',
+        text: 'Process Running',
+        animate: true,
+      },
+      stopped: {
+        bgColor: 'bg-yellow-500',
+        text: 'Process Finished!',
+        animate: false,
+      },
+      error: {
+        bgColor: 'bg-red-500',
+        text: 'Error!',
+        animate: false,
+      },
+      paused: {
+        bgColor: 'bg-orange-500',
+        text: 'Paused',
+        animate: false,
+      },
+      standby: {
+        bgColor: 'bg-gray-500',
+        text: 'Standby',
+        animate: false,
+      },
+    };
+
+    export const connectionStatusConfig: Record<
+      ConnectionStatus,
+      { bgColor: string; text: string; animate: boolean }
+    > = {
+      connecting: {
+        bgColor: 'bg-yellow-500',
+        text: 'Connecting...',
+        animate: true,
+      },
+      connected: {
+        // This is a placeholder, as 'connected' status will use the run status config.
+        bgColor: '',
+        text: '',
+        animate: false,
+      },
+      disconnected: {
+        bgColor: 'bg-orange-500',
+        text: 'Disconnected. Reconnecting...',
+        animate: true,
+      },
+      invalidated: {
+        bgColor: 'bg-red-500',
+        text: 'Error: Please reload tab',
+        animate: false,
+      },
+    };
+  src/content/App.tsx: |-
+    import { useState, useEffect, useCallback, useRef } from 'react';
+    import Indicator from './Indicator';
+    import { STOP_BUTTON_SELECTOR } from './constants';
+    import type { GlobalState, ConnectionStatus } from '../types';
+
+    /**
+     * Captures the current tab's title to use as the run name.
+     * This makes notifications more informative.
+     * @returns The tab's title, or null if it's empty.
+     */
+    function captureRunContext(): string | null {
+      try {
+        const title = document.title?.trim();
+        if (title) {
+          // Clean up the title, e.g., remove " - Google AI Studio"
+          return title.replace(/ - Google AI Studio$/, '').trim();
+        }
+      } catch (e) {
+        console.error(
+          'AI Studio Notifier: Error capturing run context from tab title.',
+          e
+        );
+      }
+      return null;
+    }
+
+    function App() {
+      const [tabId, setTabId] = useState<number | null>(null);
+      const [globalState, setGlobalState] = useState<GlobalState>({});
+      const [connectionStatus, setConnectionStatus] =
+        useState<ConnectionStatus>('connecting');
+      const lastKnownStopButtonState = useRef<boolean>(false);
+      const portRef = useRef<chrome.runtime.Port | null>(null);
+
+      useEffect(() => {
+        let port: chrome.runtime.Port | null = null;
+        let isInvalidated = false;
+        let reconnectTimeoutId: number | undefined;
+
+        function connect() {
+          // Don't try to connect if the context is known to be invalid
+          if (isInvalidated) return;
+          setConnectionStatus('connecting');
+
+          try {
+            // Accessing chrome.runtime.id will throw if context is invalidated
+            if (!chrome.runtime?.id) {
+              isInvalidated = true;
+              setConnectionStatus('invalidated');
+              console.error(
+                'AI Studio Notifier: Extension context invalidated. Cannot connect.'
+              );
+              return;
+            }
+
+            port = chrome.runtime.connect({ name: 'content-script' });
+            portRef.current = port;
+
+            port.onMessage.addListener((message: any) => {
+              setConnectionStatus('connected');
+              if (message.type === 'init') {
+                setTabId(message.tabId);
+                setGlobalState(message.state);
+              } else if (message.type === 'stateUpdate') {
+                setGlobalState(message.state);
+              }
+            });
+
+            port.onDisconnect.addListener(() => {
+              portRef.current = null;
+              port = null;
+              // If the disconnect was not from an invalidated context, try to reconnect.
+              if (chrome.runtime?.id) {
+                setConnectionStatus('disconnected');
+                console.log(
+                  'AI Studio Notifier: Port disconnected. Reconnecting in 1s...'
+                );
+                if (reconnectTimeoutId) clearTimeout(reconnectTimeoutId);
+                reconnectTimeoutId = setTimeout(connect, 1000);
+              } else {
+                setConnectionStatus('invalidated');
+                console.error(
+                  'AI Studio Notifier: Port disconnected due to invalidated context.'
+                );
+                isInvalidated = true;
+              }
+            });
+          } catch (e) {
+            portRef.current = null;
+            port = null;
+            console.error(
+              'AI Studio Notifier: Connection to background script failed:',
+              e
+            );
+            if (e instanceof Error && e.message.includes('context invalidated')) {
+              isInvalidated = true;
+              setConnectionStatus('invalidated');
+            } else {
+              setConnectionStatus('disconnected');
+              // Retry connection after a delay if it's not a fatal error
+              if (reconnectTimeoutId) clearTimeout(reconnectTimeoutId);
+              reconnectTimeoutId = setTimeout(connect, 5000);
+            }
+          }
+        }
+
+        connect();
+
+        return () => {
+          if (reconnectTimeoutId) {
+            clearTimeout(reconnectTimeoutId);
+          }
+          // The port object might be from a previous connect attempt, so check it
+          if (port) {
+            port.disconnect();
+          }
+          portRef.current = null;
+        };
+      }, []); // This effect runs only once on component mount
+
+      const postMessage = useCallback((message: any) => {
+        if (!portRef.current) {
+          console.error(
+            'AI Studio Notifier: Cannot post message, port is not connected. It may be sent after reconnection.'
+          );
+          return;
+        }
+
+        try {
+          portRef.current.postMessage(message);
+        } catch (e) {
+          console.warn(
+            'AI Studio Notifier: Could not post message. The port was likely disconnected just now.',
+            e
+          );
+          // The onDisconnect listener will handle reconnection.
+        }
+      }, []);
+
+      const checkState = useCallback(() => {
+        if (!tabId) return;
+        const currentTabState = globalState[tabId];
+        if (
+          !currentTabState ||
+          currentTabState.status === 'paused' ||
+          currentTabState.status === 'standby'
+        ) {
+          return;
+        }
+
+        try {
+          const stopButtonExists = !!document.querySelector(STOP_BUTTON_SELECTOR);
+          if (stopButtonExists !== lastKnownStopButtonState.current) {
+            lastKnownStopButtonState.current = stopButtonExists;
+            if (stopButtonExists) {
+              postMessage({ type: 'startRun', runName: captureRunContext() });
+            } else {
+              postMessage({ type: 'stopRun' });
+            }
+          }
+        } catch (e) {
+          console.error('AI Studio Notifier: Error during state check.', e);
+          postMessage({ type: 'error', error: 'An error occurred during check.' });
+        }
+      }, [globalState, tabId, postMessage]);
+
+      useEffect(() => {
+        if (!tabId) return;
+        const currentTabState = globalState[tabId];
+        if (
+          currentTabState?.status === 'paused' ||
+          currentTabState?.status === 'standby'
+        ) {
+          return;
+        }
+
+        const timeoutId = setTimeout(checkState, 1000);
+        const observer = new MutationObserver(checkState);
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        return () => {
+          clearTimeout(timeoutId);
+          observer.disconnect();
+        };
+      }, [checkState, tabId, globalState]);
+
+      const handlePauseResume = useCallback(
+        () => postMessage({ type: 'pauseResume' }),
+        [postMessage]
+      );
+      const handleClose = useCallback(
+        () => postMessage({ type: 'closeIndicator' }),
+        [postMessage]
+      );
+      const handleNavigate = useCallback(
+        (navTabId: number, windowId: number) => {
+          postMessage({ type: 'navigateToTab', tabId: navTabId, windowId });
+        },
+        [postMessage]
+      );
+
+      if (!tabId || !globalState[tabId]?.isVisible) {
+        return null;
+      }
+
+      const currentTabState = globalState[tabId];
+      if (!currentTabState) return null; // Should not happen if tabId is set
+
+      return (
+        <Indicator
+          currentTabState={currentTabState}
+          allTabsState={globalState}
+          connectionStatus={connectionStatus}
+          onPauseResume={handlePauseResume}
+          onClose={handleClose}
+          onNavigate={handleNavigate}
+        />
+      );
+    }
+
+    export default App;
+approved: true

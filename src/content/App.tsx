@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Indicator from './Indicator';
-import { STOP_BUTTON_SELECTOR } from './constants';
 import type { GlobalState, ConnectionStatus } from '../types';
 
 /**
@@ -31,8 +30,52 @@ function App() {
     useState<ConnectionStatus>('connecting');
   const lastKnownStopButtonState = useRef<boolean>(false);
   const portRef = useRef<chrome.runtime.Port | null>(null);
+  const [activeSiteSelector, setActiveSiteSelector] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
+    fetch(chrome.runtime.getURL('sites.json'))
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then((sites: { matches: string[]; selector: string }[]) => {
+        const currentUrl = window.location.href;
+        const matchedSite = sites.find((site) =>
+          site.matches.some((pattern) => {
+            // Simple wildcard to regex conversion.
+            // e.g. "https://*.example.com/*" becomes /^https:\/\/.*\.example\.com\/.*$/
+            const regex = new RegExp(
+              '^' +
+                pattern
+                  .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+                  .replace(/\*/g, '.*') +
+                '$'
+            );
+            return regex.test(currentUrl);
+          })
+        );
+
+        if (matchedSite) {
+          setActiveSiteSelector(matchedSite.selector);
+        } else {
+          // If no site matches, this content script does nothing.
+          // console.log('AI Studio Notifier: Current site not supported.');
+        }
+      })
+      .catch((error) =>
+        console.error('AI Studio Notifier: Error loading sites.json', error)
+      );
+  }, []);
+
+  useEffect(() => {
+    if (!activeSiteSelector) {
+      return; // Do nothing if on an unsupported site.
+    }
+
     let port: chrome.runtime.Port | null = null;
     let isInvalidated = false;
     let reconnectTimeoutId: number | undefined;
@@ -116,7 +159,7 @@ function App() {
       }
       portRef.current = null;
     };
-  }, []); // This effect runs only once on component mount
+  }, [activeSiteSelector]); // This effect now depends on the site being supported
 
   const postMessage = useCallback((message: any) => {
     if (!portRef.current) {
@@ -138,7 +181,7 @@ function App() {
   }, []);
 
   const checkState = useCallback(() => {
-    if (!tabId) return;
+    if (!tabId || !activeSiteSelector) return;
     const currentTabState = globalState[tabId];
     if (
       !currentTabState ||
@@ -149,7 +192,7 @@ function App() {
     }
 
     try {
-      const stopButtonExists = !!document.querySelector(STOP_BUTTON_SELECTOR);
+      const stopButtonExists = !!document.querySelector(activeSiteSelector);
       if (stopButtonExists !== lastKnownStopButtonState.current) {
         lastKnownStopButtonState.current = stopButtonExists;
         if (stopButtonExists) {
@@ -162,10 +205,12 @@ function App() {
       console.error('AI Studio Notifier: Error during state check.', e);
       postMessage({ type: 'error', error: 'An error occurred during check.' });
     }
-  }, [globalState, tabId, postMessage]);
+  }, [globalState, tabId, postMessage, activeSiteSelector]);
 
   useEffect(() => {
-    if (!tabId) return;
+    // Do not run observer if the site is not supported, or tabId is not yet known.
+    if (!tabId || !activeSiteSelector) return;
+
     const currentTabState = globalState[tabId];
     if (
       currentTabState?.status === 'paused' ||
@@ -182,7 +227,7 @@ function App() {
       clearTimeout(timeoutId);
       observer.disconnect();
     };
-  }, [checkState, tabId, globalState]);
+  }, [checkState, tabId, globalState, activeSiteSelector]);
 
   const handlePauseResume = useCallback(
     () => postMessage({ type: 'pauseResume' }),
@@ -199,7 +244,7 @@ function App() {
     [postMessage]
   );
 
-  if (!tabId || !globalState[tabId]?.isVisible) {
+  if (!activeSiteSelector || !tabId || !globalState[tabId]?.isVisible) {
     return null;
   }
 

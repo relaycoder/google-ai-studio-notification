@@ -1,0 +1,23 @@
+[
+  {
+    "name": "Google AI Studio",
+    "matches": [
+      "https://aistudio.google.com/*"
+    ],
+    "selector": "rect[class*='stoppable-stop']"
+  },
+  {
+    "name": "Kimi Chat",
+    "matches": [
+      "https://www.kimi.com/chat/*"
+    ],
+    "selector": "button[data-testid='stop-button']"
+  },
+  {
+    "name": "Qwen Chat",
+    "matches": [
+      "https://chat.qwen.ai/c/*"
+    ],
+    "selector": "button > span[aria-label='stop']"
+  }
+]
