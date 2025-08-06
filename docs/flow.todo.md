@@ -1,3 +1,7 @@
+the element target should be in constants.ts
+
+===
+
 add below state status to floating indicator:
 
 `Could not post message, port may be disconnected. Error: Attempting to use a disconnected port object`

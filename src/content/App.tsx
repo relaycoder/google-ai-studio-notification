@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Indicator from './Indicator';
+import { STOP_BUTTON_SELECTOR } from './constants';
 import type { GlobalState, ConnectionStatus } from '../types';
 
 /**
@@ -148,9 +149,7 @@ function App() {
     }
 
     try {
-      const stopButtonExists = !!document.querySelector<SVGRectElement>(
-        'rect[class*="stoppable-stop"]'
-      );
+      const stopButtonExists = !!document.querySelector(STOP_BUTTON_SELECTOR);
       if (stopButtonExists !== lastKnownStopButtonState.current) {
         lastKnownStopButtonState.current = stopButtonExists;
         if (stopButtonExists) {
