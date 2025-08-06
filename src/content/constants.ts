@@ -1,4 +1,4 @@
-import type { Status } from '../types';
+import type { Status, ConnectionStatus } from '../types';
 
 export const statusConfig: Record<
   Status,
@@ -27,6 +27,38 @@ export const statusConfig: Record<
   paused: {
     bgColor: 'bg-orange-500',
     text: 'Paused',
+    animate: false,
+  },
+  standby: {
+    bgColor: 'bg-gray-500',
+    text: 'Standby',
+    animate: false,
+  },
+};
+
+export const connectionStatusConfig: Record<
+  ConnectionStatus,
+  { bgColor: string; text: string; animate: boolean }
+> = {
+  connecting: {
+    bgColor: 'bg-yellow-500',
+    text: 'Connecting...',
+    animate: true,
+  },
+  connected: {
+    // This is a placeholder, as 'connected' status will use the run status config.
+    bgColor: '',
+    text: '',
+    animate: false,
+  },
+  disconnected: {
+    bgColor: 'bg-orange-500',
+    text: 'Disconnected. Reconnecting...',
+    animate: true,
+  },
+  invalidated: {
+    bgColor: 'bg-red-500',
+    text: 'Error: Please reload tab',
     animate: false,
   },
 };

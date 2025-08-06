@@ -1,7 +1,12 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { useMovable } from './useMovable';
-import { statusConfig } from './constants';
-import type { IndicatorProps, RunHistoryEntry, TabState } from '../types';
+import { statusConfig, connectionStatusConfig } from './constants';
+import type {
+  IndicatorProps,
+  RunHistoryEntry,
+  TabState,
+  ConnectionStatus,
+} from '../types';
 
 function formatElapsedTime(ms: number): string {
   if (ms <= 0) return '00:00';
@@ -54,6 +59,7 @@ const MIN_CONTENT_WIDTH = 200;
 function Indicator({
   currentTabState,
   allTabsState,
+  connectionStatus,
   onPauseResume,
   onClose,
   onNavigate,
@@ -186,11 +192,17 @@ function Indicator({
     return null;
   }
 
-  const config = statusConfig[currentTabState.status];
+  const isConnected = connectionStatus === 'connected';
+
+  const config = isConnected
+    ? statusConfig[currentTabState.status]
+    : connectionStatusConfig[connectionStatus];
+
   const isPausable =
-    currentTabState.status === 'running' ||
-    currentTabState.status === 'paused' ||
-    currentTabState.status === 'monitoring';
+    isConnected &&
+    (currentTabState.status === 'running' ||
+      currentTabState.status === 'paused' ||
+      currentTabState.status === 'monitoring');
 
   const totalRuns = historyTabs.reduce(
     (sum, tab) => sum + tab.history.length,
@@ -229,17 +241,20 @@ function Indicator({
             } ${config.animate ? 'animate-pulse' : ''}`}
           ></span>
           <span className="text-sm font-medium truncate">
-            {currentTabState.runName
+            {isConnected
               ? currentTabState.runName
+                ? currentTabState.runName
+                : config.text
               : config.text}
           </span>
-          {(currentTabState.status === 'running' ||
-            currentTabState.status === 'paused' ||
-            currentTabState.status === 'stopped') && (
-            <span className="text-sm font-mono text-gray-300">
-              {formatElapsedTime(currentTabState.elapsedTime)}
-            </span>
-          )}
+          {isConnected &&
+            (currentTabState.status === 'running' ||
+              currentTabState.status === 'paused' ||
+              currentTabState.status === 'stopped') && (
+              <span className="text-sm font-mono text-gray-300">
+                {formatElapsedTime(currentTabState.elapsedTime)}
+              </span>
+            )}
         </div>
         <div className="flex items-center flex-shrink-0">
           {isPausable && (
@@ -294,14 +309,16 @@ function Indicator({
           </button>
         </div>
       </div>
-      {currentTabState.status === 'error' && currentTabState.error && (
-        <p className="text-xs text-red-400 px-2 pb-2 -mt-1">
-          {currentTabState.error}
-        </p>
-      )}
+      {isConnected &&
+        currentTabState.status === 'error' &&
+        currentTabState.error && (
+          <p className="text-xs text-red-400 px-2 pb-2 -mt-1">
+            {currentTabState.error}
+          </p>
+        )}
 
       {/* Expanded History View */}
-      {isExpanded && (
+      {isConnected && isExpanded && (
         <>
           <div className="flex-grow flex border-t border-white/20 min-h-0">
             {/* Sidebar */}

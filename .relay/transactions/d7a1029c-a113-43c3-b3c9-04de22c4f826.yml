@@ -1,0 +1,1075 @@
+uuid: d7a1029c-a113-43c3-b3c9-04de22c4f826
+projectId: google-ai-studio-notification
+createdAt: '2025-08-06T10:05:31.231Z'
+linesAdded: 80
+linesRemoved: 3
+gitCommitMsg: 'feat: implement standby mode for inactive tabs'
+promptSummary: >-
+  The user wants to implement a standby monitoring feature. When the user is not
+  on the tab or the window is not focused, the monitoring should be paused to
+  save resources. When the user returns to the tab, monitoring should resume
+  automatically.
+reasoning:
+  - >-
+    Excellent! As an expert AI programmer, I'd be happy to help you implement a
+    standby mode to conserve resources. This feature will automatically pause
+    monitoring when the tab is inactive and resume it when the user returns.
+    Here are the required modifications.
+  - >-
+    I'll start by updating the type definitions and constants to include a new
+    `'standby'` state.
+  - >-
+    Next, I'll update the `App.tsx` content script to prevent it from checking
+    the DOM for changes when the indicator is in the new `'standby'` state. This
+    is the core of the resource-saving aspect on the client-side.
+  - >-
+    Finally, I'll implement the main logic in the `background.ts` service
+    worker. This involves tracking which tab and window are currently active and
+    using that information to toggle the `'monitoring'` and `'standby'` states
+    across all tabs.
+  - >-
+    These changes introduce the desired standby functionality, ensuring the
+    extension is efficient and only actively monitors when necessary.
+operations:
+  - type: write
+    path: src/types.ts
+    content: >-
+      <<<<<<< SEARCH
+
+      export type Status = 'monitoring' | 'running' | 'stopped' | 'error' |
+      'paused';
+
+      =======
+
+      export type Status =
+        | 'monitoring'
+        | 'running'
+        | 'stopped'
+        | 'error'
+        | 'paused'
+        | 'standby';
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+  - type: write
+    path: src/content/constants.ts
+    content: |-
+      <<<<<<< SEARCH
+        paused: {
+          bgColor: 'bg-orange-500',
+          text: 'Paused',
+          animate: false,
+        },
+      };
+      =======
+        paused: {
+          bgColor: 'bg-orange-500',
+          text: 'Paused',
+          animate: false,
+        },
+        standby: {
+          bgColor: 'bg-gray-500',
+          text: 'Standby',
+          animate: false,
+        },
+      };
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+  - type: write
+    path: src/content/App.tsx
+    content: |-
+      <<<<<<< SEARCH
+          if (!currentTabState || currentTabState.status === 'paused') {
+            return;
+          }
+      =======
+          if (
+            !currentTabState ||
+            currentTabState.status === 'paused' ||
+            currentTabState.status === 'standby'
+          ) {
+            return;
+          }
+      >>>>>>> REPLACE
+      <<<<<<< SEARCH
+        useEffect(() => {
+          if (!tabId) return;
+          const currentTabState = globalState[tabId];
+          if (currentTabState?.status === 'paused') {
+            return;
+          }
+      =======
+        useEffect(() => {
+          if (!tabId) return;
+          const currentTabState = globalState[tabId];
+          if (
+            currentTabState?.status === 'paused' ||
+            currentTabState?.status === 'standby'
+          ) {
+            return;
+          }
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+  - type: write
+    path: src/background.ts
+    content: |-
+      <<<<<<< SEARCH
+      let state: GlobalState = {};
+      let timerInterval: number | undefined;
+      let ports: { [tabId: number]: chrome.runtime.Port } = {};
+
+      async function getState(): Promise<GlobalState> {
+      =======
+      let state: GlobalState = {};
+      let timerInterval: number | undefined;
+      let ports: { [tabId: number]: chrome.runtime.Port } = {};
+      let lastActiveTabId: number | null = null;
+      let isWindowFocused = true; // Assume focused at startup
+
+      async function getState(): Promise<GlobalState> {
+      >>>>>>> REPLACE
+      <<<<<<< SEARCH
+      chrome.tabs.onRemoved.addListener(async (tabId) => {
+        const currentState = await getState();
+        if (currentState[tabId]) {
+          delete currentState[tabId];
+          await setState(currentState);
+        }
+      });
+
+
+      // --- Notification Logic ---
+      =======
+      chrome.tabs.onRemoved.addListener(async (tabId) => {
+        const currentState = await getState();
+        if (currentState[tabId]) {
+          delete currentState[tabId];
+          await setState(currentState);
+        }
+      });
+
+      // --- Standby Logic for Inactive Tabs ---
+
+      async function updateStandbyStates() {
+        const currentState = await getState();
+        let changed = false;
+        for (const tabIdStr in currentState) {
+          const tabId = parseInt(tabIdStr, 10);
+          const tab = currentState[tabId];
+          if (tab.status === 'monitoring' || tab.status === 'standby') {
+            const shouldBeActive = isWindowFocused && tabId === lastActiveTabId;
+            if (shouldBeActive && tab.status === 'standby') {
+              tab.status = 'monitoring';
+              changed = true;
+            } else if (!shouldBeActive && tab.status === 'monitoring') {
+              tab.status = 'standby';
+              changed = true;
+            }
+          }
+        }
+        if (changed) {
+          await setState(currentState);
+        }
+      }
+
+      chrome.tabs.onActivated.addListener(async (activeInfo) => {
+        lastActiveTabId = activeInfo.tabId;
+        const window = await chrome.windows.get(activeInfo.windowId);
+        isWindowFocused = window.focused;
+        await updateStandbyStates();
+      });
+
+      chrome.windows.onFocusChanged.addListener(async (windowId) => {
+        isWindowFocused = windowId !== chrome.windows.WINDOW_ID_NONE;
+        if (isWindowFocused) {
+          const [activeTab] = await chrome.tabs.query({ active: true, windowId });
+          if (activeTab?.id) {
+            lastActiveTabId = activeTab.id;
+          }
+        }
+        await updateStandbyStates();
+      });
+
+
+      // --- Notification Logic ---
+      >>>>>>> REPLACE
+      <<<<<<< SEARCH
+      // --- Service Worker Startup ---
+      (async () => {
+        state = await getState();
+        console.log('AI Studio Notifier: Background state loaded.');
+
+        const tabs = await chrome.tabs.query({});
+      =======
+      // --- Service Worker Startup ---
+      (async () => {
+        state = await getState();
+        console.log('AI Studio Notifier: Background state loaded.');
+
+        // Set initial focus and active tab for standby logic
+        try {
+          const [activeTab] = await chrome.tabs.query({
+            active: true,
+            lastFocusedWindow: true,
+          });
+          const lastFocusedWindow = await chrome.windows.getLastFocused();
+          isWindowFocused = lastFocusedWindow?.focused ?? true;
+          lastActiveTabId = activeTab?.id ?? null;
+        } catch (e) {
+          console.warn('Could not determine active tab at startup.');
+        }
+
+        const tabs = await chrome.tabs.query({});
+      >>>>>>> REPLACE
+      <<<<<<< SEARCH
+        if (Object.values(state).some((t) => t.status === 'running')) {
+          ensureTimerIsRunning();
+        }
+      })();
+      =======
+        if (Object.values(state).some((t) => t.status === 'running')) {
+          ensureTimerIsRunning();
+        }
+
+        await updateStandbyStates();
+      })();
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+snapshot:
+  src/types.ts: >-
+    export type Status = 'monitoring' | 'running' | 'stopped' | 'error' |
+    'paused';
+
+
+    export type ConnectionStatus =
+      | 'connecting'
+      | 'connected'
+      | 'disconnected'
+      | 'invalidated';
+
+    export interface RunHistoryEntry {
+      id: string;
+      runName: string | null;
+      durationMs: number;
+      status: 'stopped' | 'error';
+      endTime: number;
+    }
+
+
+    export interface TabState {
+      tabId: number;
+      windowId: number;
+      status: Status;
+      runName: string | null;
+      startTime: number | null;
+      elapsedTime: number;
+      pausedTime: number;
+      pauseStartTime: number | null;
+      history: RunHistoryEntry[];
+      error: string | null;
+      isVisible: boolean; // To control indicator visibility per tab
+    }
+
+
+    export interface GlobalState {
+      [tabId: number]: TabState;
+    }
+
+
+    export interface MessageBase {
+      type: string;
+    }
+
+
+    export interface InitMessage extends MessageBase {
+        type: 'init';
+        tabId: number;
+        state: GlobalState;
+    }
+
+
+    export interface StateUpdateMessage extends MessageBase {
+        type: 'stateUpdate';
+        state: GlobalState;
+    }
+
+
+    export interface StartRunMessage extends MessageBase {
+        type: 'startRun';
+        runName: string | null;
+    }
+
+
+    export interface StopRunMessage extends MessageBase {
+        type: 'stopRun';
+        isError?: boolean;
+        error?: string;
+    }
+
+
+    export interface PauseResumeMessage extends MessageBase {
+        type: 'pauseResume';
+    }
+
+
+    export interface CloseIndicatorMessage extends MessageBase {
+        type: 'closeIndicator';
+    }
+
+
+    export interface NavigateToTabMessage extends MessageBase {
+        type: 'navigateToTab';
+        tabId: number;
+        windowId: number;
+    }
+
+
+    export interface ErrorMessage extends MessageBase {
+        type: 'error';
+        error: string;
+    }
+
+
+
+    // Union type for messages
+
+    export type Message =
+      | InitMessage
+      | StateUpdateMessage
+      | StartRunMessage
+      | StopRunMessage
+      | PauseResumeMessage
+      | CloseIndicatorMessage
+      | NavigateToTabMessage
+      | ErrorMessage;
+
+
+    export interface NotificationContext {
+      tabId: number;
+      windowId: number;
+      durationMs?: number | null;
+      runName?: string | null;
+    }
+
+
+    export interface IndicatorProps {
+      currentTabState: TabState;
+      allTabsState: GlobalState;
+      connectionStatus: ConnectionStatus;
+      onPauseResume: () => void;
+      onClose: () => void;
+      onNavigate: (tabId: number, windowId: number) => void;
+    }
+  src/content/constants.ts: |-
+    import type { Status, ConnectionStatus } from '../types';
+
+    export const statusConfig: Record<
+      Status,
+      { bgColor: string; text: string; animate: boolean }
+    > = {
+      monitoring: {
+        bgColor: 'bg-blue-500',
+        text: 'Monitoring',
+        animate: false,
+      },
+      running: {
+        bgColor: 'bg-green-500',
+        text: 'Process Running',
+        animate: true,
+      },
+      stopped: {
+        bgColor: 'bg-yellow-500',
+        text: 'Process Finished!',
+        animate: false,
+      },
+      error: {
+        bgColor: 'bg-red-500',
+        text: 'Error!',
+        animate: false,
+      },
+      paused: {
+        bgColor: 'bg-orange-500',
+        text: 'Paused',
+        animate: false,
+      },
+    };
+
+    export const connectionStatusConfig: Record<
+      ConnectionStatus,
+      { bgColor: string; text: string; animate: boolean }
+    > = {
+      connecting: {
+        bgColor: 'bg-yellow-500',
+        text: 'Connecting...',
+        animate: true,
+      },
+      connected: {
+        // This is a placeholder, as 'connected' status will use the run status config.
+        bgColor: '',
+        text: '',
+        animate: false,
+      },
+      disconnected: {
+        bgColor: 'bg-orange-500',
+        text: 'Disconnected. Reconnecting...',
+        animate: true,
+      },
+      invalidated: {
+        bgColor: 'bg-red-500',
+        text: 'Error: Please reload tab',
+        animate: false,
+      },
+    };
+  src/background.ts: |-
+    import type {
+      GlobalState,
+      TabState,
+      RunHistoryEntry,
+      NotificationContext,
+      Message,
+    } from './types';
+
+    // --- State Management ---
+
+    const STATE_KEY = 'ai-studio-tracker-state';
+    let state: GlobalState = {};
+    let timerInterval: number | undefined;
+    let ports: { [tabId: number]: chrome.runtime.Port } = {};
+
+    async function getState(): Promise<GlobalState> {
+      const result = await chrome.storage.local.get(STATE_KEY);
+      return result[STATE_KEY] || {};
+    }
+
+    async function setState(newState: GlobalState): Promise<void> {
+      state = newState;
+      await chrome.storage.local.set({ [STATE_KEY]: newState });
+      broadcastState();
+    }
+
+    function broadcastState() {
+      for (const tabIdStr in ports) {
+        const port = ports[tabIdStr];
+        try {
+          port.postMessage({ type: 'stateUpdate', state: state });
+        } catch (e) {
+          console.warn(`Could not send state to tab ${tabIdStr}, port is likely closed.`);
+        }
+      }
+    }
+
+    async function updateTabState<T>(
+      tabId: number,
+      updater: (tab: TabState) => T
+    ): Promise<T | undefined> {
+      const currentState = await getState();
+      const tab = currentState[tabId];
+      if (!tab) return undefined;
+
+      const result = updater(tab);
+      await setState(currentState);
+      return result;
+    }
+
+    function getInitialTabState(tabId: number, windowId: number): TabState {
+      return {
+        tabId,
+        windowId,
+        status: 'monitoring',
+        runName: null,
+        startTime: null,
+        elapsedTime: 0,
+        pausedTime: 0,
+        pauseStartTime: null,
+        history: [],
+        error: null,
+        isVisible: true,
+      };
+    }
+
+    // --- Timer for Elapsed Time ---
+
+    function updateTimers() {
+      let needsUpdate = false;
+      const now = Date.now();
+
+      for (const tabIdStr in state) {
+        const tabId = parseInt(tabIdStr, 10);
+        const tab = state[tabId];
+        if (tab.status === 'running' && tab.startTime) {
+          tab.elapsedTime = now - tab.startTime - tab.pausedTime;
+          needsUpdate = true;
+        }
+      }
+
+      if (needsUpdate) {
+        state = { ...state };
+        broadcastState();
+      }
+
+      const anyRunning = Object.values(state).some(
+        (t) => t.status === 'running'
+      );
+      if (!anyRunning && timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = undefined;
+      }
+    }
+
+    function ensureTimerIsRunning() {
+      if (!timerInterval) {
+        timerInterval = setInterval(updateTimers, 1000);
+      }
+    }
+
+    // --- Port-based Communication ---
+
+    chrome.runtime.onConnect.addListener((port) => {
+      if (port.name !== 'content-script' || !port.sender?.tab?.id) {
+        return;
+      }
+      const tabId = port.sender.tab.id;
+      const windowId = port.sender.tab.windowId ?? -1;
+      ports[tabId] = port;
+
+      port.onMessage.addListener(async (message: Message) => {
+        switch (message.type) {
+          case 'startRun':
+            handleStartRun(tabId, message.runName);
+            break;
+          case 'stopRun':
+            handleStopRun(tabId, message.isError, message.error);
+            break;
+          case 'pauseResume':
+            handlePauseResume(tabId);
+            break;
+          case 'closeIndicator':
+            handleCloseIndicator(tabId);
+            break;
+          case 'navigateToTab':
+            handleNavigateToTab(message.tabId, message.windowId);
+            break;
+          case 'error':
+            updateTabState(tabId, (tab) => {
+              tab.status = 'error';
+              tab.error = message.error;
+            });
+            break;
+        }
+      });
+
+      port.onDisconnect.addListener(() => {
+        delete ports[tabId];
+        console.log(`Port disconnected for tab ${tabId}`);
+      });
+
+      // Handle initial connection
+      (async () => {
+        let currentState = await getState();
+        if (!currentState[tabId]) {
+          currentState[tabId] = getInitialTabState(tabId, windowId);
+        } else {
+          currentState[tabId].isVisible = true; // Make visible on reconnect
+          currentState[tabId].windowId = windowId;
+        }
+        await setState(currentState);
+        currentState = await getState(); // Re-read state after setState
+        port.postMessage({
+          type: 'init',
+          tabId: tabId,
+          state: currentState,
+        });
+      })();
+    });
+
+
+    async function handleStartRun(tabId: number, runName: string | null) {
+      await updateTabState(tabId, (tab) => {
+        // Prevent resetting a run that the content script thinks has started again
+        // on page load.
+        if (tab.status === 'running') return;
+
+        tab.status = 'running';
+        tab.startTime = Date.now();
+        tab.runName = runName;
+        tab.elapsedTime = 0;
+        tab.pausedTime = 0;
+        tab.pauseStartTime = null;
+        tab.error = null;
+
+        ensureTimerIsRunning();
+      });
+    }
+
+    async function handleStopRun(
+      tabId: number,
+      isError = false,
+      error?: string
+    ) {
+      const notificationContext = await updateTabState(tabId, (tab) => {
+        if (tab.status === 'monitoring' || tab.status === 'stopped') return null;
+
+        const endTime = Date.now();
+        const finalElapsedTime = tab.startTime
+          ? endTime - tab.startTime - tab.pausedTime
+          : 0;
+        const finalStatus = isError ? 'error' : 'stopped';
+
+        const historyEntry: RunHistoryEntry = {
+          id: `${tabId}-${endTime}`,
+          runName: tab.runName,
+          durationMs: finalElapsedTime,
+          status: finalStatus,
+          endTime: endTime,
+        };
+        tab.history.unshift(historyEntry);
+        if (tab.history.length > 20) {
+          tab.history.pop();
+        }
+
+        tab.status = 'stopped';
+        tab.startTime = null;
+        // tab.runName is preserved for the "stopped" message
+        tab.elapsedTime = finalElapsedTime;
+        tab.error = error || null;
+
+        // After 5s, reset to monitoring to make it clear we're ready for the next run.
+        if (!isError) {
+          setTimeout(async () => {
+            const freshState = await getState();
+            const freshTab = freshState[tabId];
+            // Make sure we don't reset if a new run has already started.
+            if (
+              freshTab &&
+              freshTab.status === 'stopped' &&
+              freshTab.history[0]?.id === historyEntry.id
+            ) {
+              freshTab.status = 'monitoring';
+              freshTab.runName = null;
+              freshTab.elapsedTime = 0;
+              freshTab.error = null;
+              await setState(freshState);
+            }
+          }, 5000);
+        }
+
+        if (finalElapsedTime >= 3000) {
+          return {
+            tabId: tab.tabId,
+            windowId: tab.windowId,
+            durationMs: finalElapsedTime,
+            runName: historyEntry.runName,
+          };
+        }
+        return null;
+      });
+
+      if (notificationContext) {
+        createNotification(notificationContext);
+      }
+    }
+
+    async function handlePauseResume(tabId: number) {
+      await updateTabState(tabId, (tab) => {
+        if (tab.status === 'running') {
+          tab.pauseStartTime = Date.now();
+          tab.status = 'paused';
+          // Update elapsed time one last time before pausing interval
+          if (tab.startTime) {
+            tab.elapsedTime = Date.now() - tab.startTime - tab.pausedTime;
+          }
+        } else if (tab.status === 'paused') {
+          if (tab.pauseStartTime) {
+            tab.pausedTime += Date.now() - tab.pauseStartTime;
+          }
+          tab.pauseStartTime = null;
+          tab.status = 'running';
+          ensureTimerIsRunning();
+        }
+      });
+    }
+
+    async function handleCloseIndicator(tabId: number) {
+      updateTabState(tabId, (tab) => {
+        tab.isVisible = false;
+      });
+    }
+
+    function handleNavigateToTab(tabId: number, windowId: number) {
+      chrome.windows.update(windowId, { focused: true });
+      chrome.tabs.update(tabId, { active: true });
+    }
+
+    // --- Tab Lifecycle Management ---
+
+    chrome.tabs.onRemoved.addListener(async (tabId) => {
+      const currentState = await getState();
+      if (currentState[tabId]) {
+        delete currentState[tabId];
+        await setState(currentState);
+      }
+    });
+
+
+    // --- Notification Logic ---
+
+    function formatDuration(ms: number | null | undefined): string {
+      if (!ms || ms < 1000) {
+        return '';
+      }
+      const totalSeconds = Math.round(ms / 1000);
+      if (totalSeconds < 60) {
+        return `${totalSeconds}s`;
+      }
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      if (seconds === 0) {
+        return `${minutes}m`;
+      }
+      return `${minutes}m ${seconds}s`;
+    }
+
+    function createNotification(context: NotificationContext) {
+      const durationText = formatDuration(context.durationMs);
+      const durationPart = durationText ? `in ${durationText}` : '';
+
+      let title: string;
+      if (context.runName) {
+        title = ['Finished', durationPart, `- ${context.runName}`]
+          .filter(Boolean)
+          .join(' ');
+      } else {
+        title = ['AI Studio Process Finished', durationPart]
+          .filter(Boolean)
+          .join(' ');
+      }
+
+      const message = `Your process has finished running.`;
+      chrome.notifications.create(
+        {
+          type: 'basic',
+          iconUrl: 'icon128.png',
+          title: title,
+          message: message,
+          priority: 2,
+          requireInteraction: false,
+          buttons: [{ title: 'Dismiss' }, { title: 'Remind in 5 min' }],
+        },
+        (notificationId) => {
+          if (notificationId) {
+            const storageKey = `notification:${notificationId}`;
+            chrome.storage.local.set({ [storageKey]: context });
+            console.log(
+              `Notification created: ${notificationId}. Context stored.`
+            );
+          }
+        }
+      );
+    }
+
+    chrome.notifications.onClicked.addListener(async (notificationId) => {
+      const storageKey = `notification:${notificationId}`;
+      const data = await chrome.storage.local.get(storageKey);
+      const context = data[storageKey] as NotificationContext | undefined;
+
+      if (!context) {
+        console.warn(`No context found for clicked notification: ${notificationId}`);
+        return;
+      }
+
+      handleNavigateToTab(context.tabId, context.windowId);
+      chrome.notifications.clear(notificationId);
+    });
+
+    chrome.notifications.onButtonClicked.addListener(
+      async (notificationId, buttonIndex) => {
+        const storageKey = `notification:${notificationId}`;
+        const data = await chrome.storage.local.get(storageKey);
+        const context = data[storageKey] as NotificationContext | undefined;
+
+        if (!context) {
+          console.warn(`No context found for notification: ${notificationId}`);
+          return;
+        }
+
+        switch (buttonIndex) {
+          case 0: // Dismiss
+            chrome.notifications.clear(notificationId);
+            break;
+          case 1: // Remind in 5 min
+            {
+              const alarmName = `remind-${notificationId}`;
+              await chrome.storage.local.set({ [alarmName]: context });
+              chrome.alarms.create(alarmName, { delayInMinutes: 5 });
+              chrome.notifications.clear(notificationId);
+            }
+            break;
+        }
+      }
+    );
+
+    // Listener for when a notification is closed (programmatically or by user)
+    // This is crucial for cleaning up storage to prevent exceeding quotas.
+    chrome.notifications.onClosed.addListener((notificationId) => {
+      const storageKey = `notification:${notificationId}`;
+      // We don't need to await this, it can run in the background.
+      chrome.storage.local.remove(storageKey);
+      console.log(
+        `Cleaned up storage for closed notification: ${notificationId}`
+      );
+    });
+
+    chrome.alarms.onAlarm.addListener(async (alarm) => {
+      if (alarm.name.startsWith('remind-')) {
+        const data = await chrome.storage.local.get(alarm.name);
+        const context = data[alarm.name] as NotificationContext | undefined;
+
+        if (context) {
+          console.log(`Re-creating notification from alarm: ${alarm.name}`);
+          createNotification(context);
+          await chrome.storage.local.remove(alarm.name);
+        }
+      }
+    });
+
+    // --- Service Worker Startup ---
+    (async () => {
+      state = await getState();
+      console.log('AI Studio Notifier: Background state loaded.');
+
+      const tabs = await chrome.tabs.query({});
+      const existingTabIds = new Set(tabs.map((t) => t.id).filter(Boolean));
+      const stateTabIds = Object.keys(state).map(Number);
+      let stateChanged = false;
+
+      for (const tabId of stateTabIds) {
+        if (!existingTabIds.has(tabId)) {
+          delete state[tabId];
+          stateChanged = true;
+        }
+      }
+
+      if (stateChanged) {
+        await setState(state);
+      }
+
+      if (Object.values(state).some((t) => t.status === 'running')) {
+        ensureTimerIsRunning();
+      }
+    })();
+  src/content/App.tsx: |-
+    import { useState, useEffect, useCallback, useRef } from 'react';
+    import Indicator from './Indicator';
+    import type { GlobalState, ConnectionStatus } from '../types';
+
+    /**
+     * Captures the current tab's title to use as the run name.
+     * This makes notifications more informative.
+     * @returns The tab's title, or null if it's empty.
+     */
+    function captureRunContext(): string | null {
+      try {
+        const title = document.title?.trim();
+        if (title) {
+          // Clean up the title, e.g., remove " - Google AI Studio"
+          return title.replace(/ - Google AI Studio$/, '').trim();
+        }
+      } catch (e) {
+        console.error(
+          'AI Studio Notifier: Error capturing run context from tab title.',
+          e
+        );
+      }
+      return null;
+    }
+
+    function App() {
+      const [tabId, setTabId] = useState<number | null>(null);
+      const [globalState, setGlobalState] = useState<GlobalState>({});
+      const [connectionStatus, setConnectionStatus] =
+        useState<ConnectionStatus>('connecting');
+      const lastKnownStopButtonState = useRef<boolean>(false);
+      const portRef = useRef<chrome.runtime.Port | null>(null);
+
+      useEffect(() => {
+        let port: chrome.runtime.Port | null = null;
+        let isInvalidated = false;
+        let reconnectTimeoutId: number | undefined;
+
+        function connect() {
+          // Don't try to connect if the context is known to be invalid
+          if (isInvalidated) return;
+          setConnectionStatus('connecting');
+
+          try {
+            // Accessing chrome.runtime.id will throw if context is invalidated
+            if (!chrome.runtime?.id) {
+              isInvalidated = true;
+              setConnectionStatus('invalidated');
+              console.error(
+                'AI Studio Notifier: Extension context invalidated. Cannot connect.'
+              );
+              return;
+            }
+
+            port = chrome.runtime.connect({ name: 'content-script' });
+            portRef.current = port;
+
+            port.onMessage.addListener((message: any) => {
+              setConnectionStatus('connected');
+              if (message.type === 'init') {
+                setTabId(message.tabId);
+                setGlobalState(message.state);
+              } else if (message.type === 'stateUpdate') {
+                setGlobalState(message.state);
+              }
+            });
+
+            port.onDisconnect.addListener(() => {
+              portRef.current = null;
+              port = null;
+              // If the disconnect was not from an invalidated context, try to reconnect.
+              if (chrome.runtime?.id) {
+                setConnectionStatus('disconnected');
+                console.log(
+                  'AI Studio Notifier: Port disconnected. Reconnecting in 1s...'
+                );
+                if (reconnectTimeoutId) clearTimeout(reconnectTimeoutId);
+                reconnectTimeoutId = setTimeout(connect, 1000);
+              } else {
+                setConnectionStatus('invalidated');
+                console.error(
+                  'AI Studio Notifier: Port disconnected due to invalidated context.'
+                );
+                isInvalidated = true;
+              }
+            });
+          } catch (e) {
+            portRef.current = null;
+            port = null;
+            console.error(
+              'AI Studio Notifier: Connection to background script failed:',
+              e
+            );
+            if (e instanceof Error && e.message.includes('context invalidated')) {
+              isInvalidated = true;
+              setConnectionStatus('invalidated');
+            } else {
+              setConnectionStatus('disconnected');
+              // Retry connection after a delay if it's not a fatal error
+              if (reconnectTimeoutId) clearTimeout(reconnectTimeoutId);
+              reconnectTimeoutId = setTimeout(connect, 5000);
+            }
+          }
+        }
+
+        connect();
+
+        return () => {
+          if (reconnectTimeoutId) {
+            clearTimeout(reconnectTimeoutId);
+          }
+          // The port object might be from a previous connect attempt, so check it
+          if (port) {
+            port.disconnect();
+          }
+          portRef.current = null;
+        };
+      }, []); // This effect runs only once on component mount
+
+      const postMessage = useCallback((message: any) => {
+        if (!portRef.current) {
+          console.error(
+            'AI Studio Notifier: Cannot post message, port is not connected. It may be sent after reconnection.'
+          );
+          return;
+        }
+
+        try {
+          portRef.current.postMessage(message);
+        } catch (e) {
+          console.warn(
+            'AI Studio Notifier: Could not post message. The port was likely disconnected just now.',
+            e
+          );
+          // The onDisconnect listener will handle reconnection.
+        }
+      }, []);
+
+      const checkState = useCallback(() => {
+        if (!tabId) return;
+        const currentTabState = globalState[tabId];
+        if (!currentTabState || currentTabState.status === 'paused') {
+          return;
+        }
+
+        try {
+          const stopButtonExists = !!document.querySelector<SVGRectElement>(
+            'rect[class*="stoppable-stop"]'
+          );
+          if (stopButtonExists !== lastKnownStopButtonState.current) {
+            lastKnownStopButtonState.current = stopButtonExists;
+            if (stopButtonExists) {
+              postMessage({ type: 'startRun', runName: captureRunContext() });
+            } else {
+              postMessage({ type: 'stopRun' });
+            }
+          }
+        } catch (e) {
+          console.error('AI Studio Notifier: Error during state check.', e);
+          postMessage({ type: 'error', error: 'An error occurred during check.' });
+        }
+      }, [globalState, tabId, postMessage]);
+
+      useEffect(() => {
+        if (!tabId) return;
+        const currentTabState = globalState[tabId];
+        if (currentTabState?.status === 'paused') {
+          return;
+        }
+
+        const timeoutId = setTimeout(checkState, 1000);
+        const observer = new MutationObserver(checkState);
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        return () => {
+          clearTimeout(timeoutId);
+          observer.disconnect();
+        };
+      }, [checkState, tabId, globalState]);
+
+      const handlePauseResume = useCallback(
+        () => postMessage({ type: 'pauseResume' }),
+        [postMessage]
+      );
+      const handleClose = useCallback(
+        () => postMessage({ type: 'closeIndicator' }),
+        [postMessage]
+      );
+      const handleNavigate = useCallback(
+        (navTabId: number, windowId: number) => {
+          postMessage({ type: 'navigateToTab', tabId: navTabId, windowId });
+        },
+        [postMessage]
+      );
+
+      if (!tabId || !globalState[tabId]?.isVisible) {
+        return null;
+      }
+
+      const currentTabState = globalState[tabId];
+      if (!currentTabState) return null; // Should not happen if tabId is set
+
+      return (
+        <Indicator
+          currentTabState={currentTabState}
+          allTabsState={globalState}
+          connectionStatus={connectionStatus}
+          onPauseResume={handlePauseResume}
+          onClose={handleClose}
+          onNavigate={handleNavigate}
+        />
+      );
+    }
+
+    export default App;
+approved: true

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Indicator from './Indicator';
-import type { GlobalState } from '../types';
+import type { GlobalState, ConnectionStatus } from '../types';
 
 /**
  * Captures the current tab's title to use as the run name.
@@ -26,83 +26,124 @@ function captureRunContext(): string | null {
 function App() {
   const [tabId, setTabId] = useState<number | null>(null);
   const [globalState, setGlobalState] = useState<GlobalState>({});
+  const [connectionStatus, setConnectionStatus] =
+    useState<ConnectionStatus>('connecting');
   const lastKnownStopButtonState = useRef<boolean>(false);
   const portRef = useRef<chrome.runtime.Port | null>(null);
 
-  // This function will be responsible for ensuring a connection exists.
-  const ensureConnection = useCallback(() => {
-    if (portRef.current) {
+  useEffect(() => {
+    let port: chrome.runtime.Port | null = null;
+    let isInvalidated = false;
+    let reconnectTimeoutId: number | undefined;
+
+    function connect() {
+      // Don't try to connect if the context is known to be invalid
+      if (isInvalidated) return;
+      setConnectionStatus('connecting');
+
+      try {
+        // Accessing chrome.runtime.id will throw if context is invalidated
+        if (!chrome.runtime?.id) {
+          isInvalidated = true;
+          setConnectionStatus('invalidated');
+          console.error(
+            'AI Studio Notifier: Extension context invalidated. Cannot connect.'
+          );
+          return;
+        }
+
+        port = chrome.runtime.connect({ name: 'content-script' });
+        portRef.current = port;
+
+        port.onMessage.addListener((message: any) => {
+          setConnectionStatus('connected');
+          if (message.type === 'init') {
+            setTabId(message.tabId);
+            setGlobalState(message.state);
+          } else if (message.type === 'stateUpdate') {
+            setGlobalState(message.state);
+          }
+        });
+
+        port.onDisconnect.addListener(() => {
+          portRef.current = null;
+          port = null;
+          // If the disconnect was not from an invalidated context, try to reconnect.
+          if (chrome.runtime?.id) {
+            setConnectionStatus('disconnected');
+            console.log(
+              'AI Studio Notifier: Port disconnected. Reconnecting in 1s...'
+            );
+            if (reconnectTimeoutId) clearTimeout(reconnectTimeoutId);
+            reconnectTimeoutId = setTimeout(connect, 1000);
+          } else {
+            setConnectionStatus('invalidated');
+            console.error(
+              'AI Studio Notifier: Port disconnected due to invalidated context.'
+            );
+            isInvalidated = true;
+          }
+        });
+      } catch (e) {
+        portRef.current = null;
+        port = null;
+        console.error(
+          'AI Studio Notifier: Connection to background script failed:',
+          e
+        );
+        if (e instanceof Error && e.message.includes('context invalidated')) {
+          isInvalidated = true;
+          setConnectionStatus('invalidated');
+        } else {
+          setConnectionStatus('disconnected');
+          // Retry connection after a delay if it's not a fatal error
+          if (reconnectTimeoutId) clearTimeout(reconnectTimeoutId);
+          reconnectTimeoutId = setTimeout(connect, 5000);
+        }
+      }
+    }
+
+    connect();
+
+    return () => {
+      if (reconnectTimeoutId) {
+        clearTimeout(reconnectTimeoutId);
+      }
+      // The port object might be from a previous connect attempt, so check it
+      if (port) {
+        port.disconnect();
+      }
+      portRef.current = null;
+    };
+  }, []); // This effect runs only once on component mount
+
+  const postMessage = useCallback((message: any) => {
+    if (!portRef.current) {
+      console.error(
+        'AI Studio Notifier: Cannot post message, port is not connected. It may be sent after reconnection.'
+      );
       return;
     }
 
     try {
-      portRef.current = chrome.runtime.connect({ name: 'content-script' });
-
-      // Handle disconnection
-      portRef.current.onDisconnect.addListener(() => {
-        portRef.current = null;
-        console.log(
-          'AI Studio Notifier: Port disconnected. It will be reconnected on the next action.'
-        );
-      });
-
-      // Handle incoming messages
-      portRef.current.onMessage.addListener((message: any) => {
-        if (message.type === 'init') {
-          setTabId(message.tabId);
-          setGlobalState(message.state);
-        } else if (message.type === 'stateUpdate') {
-          setGlobalState(message.state);
-        }
-      });
+      portRef.current.postMessage(message);
     } catch (e) {
-      console.error(
-        'AI Studio Notifier: Connection to background script failed:',
+      console.warn(
+        'AI Studio Notifier: Could not post message. The port was likely disconnected just now.',
         e
       );
-      portRef.current = null; // Ensure it's null on failure
+      // The onDisconnect listener will handle reconnection.
     }
   }, []);
-
-  useEffect(() => {
-    ensureConnection();
-
-    return () => {
-      if (portRef.current) {
-        portRef.current.disconnect();
-        portRef.current = null;
-      }
-    };
-  }, [ensureConnection]);
-
-  const postMessage = useCallback(
-    (message: any) => {
-      // Ensure connection exists before posting a message.
-      ensureConnection();
-
-      if (!portRef.current) {
-        console.error(
-          'AI Studio Notifier: Cannot post message, port is not connected.'
-        );
-        return;
-      }
-
-      try {
-        portRef.current.postMessage(message);
-      } catch (e) {
-        console.warn(
-          'AI Studio Notifier: Could not post message. The port may have been disconnected just now.',
-          e
-        );
-      }
-    },
-    [ensureConnection]
-  );
 
   const checkState = useCallback(() => {
     if (!tabId) return;
     const currentTabState = globalState[tabId];
-    if (!currentTabState || currentTabState.status === 'paused') {
+    if (
+      !currentTabState ||
+      currentTabState.status === 'paused' ||
+      currentTabState.status === 'standby'
+    ) {
       return;
     }
 
@@ -127,7 +168,10 @@ function App() {
   useEffect(() => {
     if (!tabId) return;
     const currentTabState = globalState[tabId];
-    if (currentTabState?.status === 'paused') {
+    if (
+      currentTabState?.status === 'paused' ||
+      currentTabState?.status === 'standby'
+    ) {
       return;
     }
 
@@ -167,6 +211,7 @@ function App() {
     <Indicator
       currentTabState={currentTabState}
       allTabsState={globalState}
+      connectionStatus={connectionStatus}
       onPauseResume={handlePauseResume}
       onClose={handleClose}
       onNavigate={handleNavigate}

@@ -1,4 +1,16 @@
-export type Status = 'monitoring' | 'running' | 'stopped' | 'error' | 'paused';
+export type Status =
+  | 'monitoring'
+  | 'running'
+  | 'stopped'
+  | 'error'
+  | 'paused'
+  | 'standby';
+
+export type ConnectionStatus =
+  | 'connecting'
+  | 'connected'
+  | 'disconnected'
+  | 'invalidated';
 
 export interface RunHistoryEntry {
   id: string;
@@ -94,6 +106,7 @@ export interface NotificationContext {
 export interface IndicatorProps {
   currentTabState: TabState;
   allTabsState: GlobalState;
+  connectionStatus: ConnectionStatus;
   onPauseResume: () => void;
   onClose: () => void;
   onNavigate: (tabId: number, windowId: number) => void;

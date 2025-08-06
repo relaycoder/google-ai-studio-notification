@@ -1,3 +1,26 @@
+add below state status to floating indicator:
+
+`Could not post message, port may be disconnected. Error: Attempting to use a disconnected port object`
+`AI Studio Notifier: Cannot post message, port is not connected.`
+`AI Studio Notifier: Connection to background script failed: Error: Extension context invalidated.`
+
+===
+
+standby monitoring should auto paused when the user is not in the tab or not active. and auto resume monitoring when the user is back. so we can save resource
+
+===
+
+multi tab usage on different chrome tab profile always causing error
+
+`AI Studio Notifier: Cannot post message, port is not connected.`
+`AI Studio Notifier: Connection to background script failed: Error: Extension context invalidated.`
+
+===
+
+remove the width gap in floating indicator.
+
+===
+
 content.js problems
 
 Could not post message, port may be disconnected. Error: Attempting to use a disconnected port object
@@ -155,3 +178,23 @@ so that can be fast navigating while desktop on another window
 add draggable floating indicator that showing the status so user know wether current page is being monitored, paused, error problem or what. use react tailwind
 
 ===
+
+create chrome extension
+
+that is always watching for a button state in  https://aistudio.google.com/* tab
+
+state 1: running and stoppable
+
+has element
+
+<rect _ngcontent-ng-c704612383="" x="8" y="8" width="8" height="8" class="stoppable-stop ng-tns-c704612383-13"></rect>
+
+state 2: stopped and runnable
+
+has no element/ absence of
+
+<rect _ngcontent-ng-c704612383="" x="8" y="8" width="8" height="8" class="stoppable-stop ng-tns-c704612383-13"></rect>
+
+I believe the static part of code to trace is the word of `stoppable-stop`
+
+I want the chrome extension play notification sound on every transition of state 1 to state 2

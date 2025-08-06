@@ -21,6 +21,34 @@ vite.config.ts
 
 # Files
 
+## File: src/content/index.tsx
+```typescript
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './style.css';
+
+// Create a root element to mount the React app
+const rootEl = document.createElement('div');
+rootEl.id = 'ai-studio-notifier-root';
+document.body.appendChild(rootEl);
+
+// Render the App component
+const root = ReactDOM.createRoot(rootEl);
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+```
+
+## File: src/content/style.css
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
 ## File: src/content/useMovable.ts
 ```typescript
 import { useState, useCallback, RefObject, useEffect, useRef } from 'react';
@@ -264,70 +292,6 @@ export function useMovable(
 }
 ```
 
-## File: src/content/constants.ts
-```typescript
-import type { Status } from '../types';
-
-export const statusConfig: Record<
-  Status,
-  { bgColor: string; text: string; animate: boolean }
-> = {
-  monitoring: {
-    bgColor: 'bg-blue-500',
-    text: 'Monitoring',
-    animate: false,
-  },
-  running: {
-    bgColor: 'bg-green-500',
-    text: 'Process Running',
-    animate: true,
-  },
-  stopped: {
-    bgColor: 'bg-yellow-500',
-    text: 'Process Finished!',
-    animate: false,
-  },
-  error: {
-    bgColor: 'bg-red-500',
-    text: 'Error!',
-    animate: false,
-  },
-  paused: {
-    bgColor: 'bg-orange-500',
-    text: 'Paused',
-    animate: false,
-  },
-};
-```
-
-## File: src/content/index.tsx
-```typescript
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App';
-import './style.css';
-
-// Create a root element to mount the React app
-const rootEl = document.createElement('div');
-rootEl.id = 'ai-studio-notifier-root';
-document.body.appendChild(rootEl);
-
-// Render the App component
-const root = ReactDOM.createRoot(rootEl);
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
-```
-
-## File: src/content/style.css
-```css
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-```
-
 ## File: .prettierrc.json
 ```json
 {
@@ -394,108 +358,67 @@ export default defineConfig({
 });
 ```
 
-## File: src/types.ts
+## File: src/content/constants.ts
 ```typescript
-export type Status = 'monitoring' | 'running' | 'stopped' | 'error' | 'paused';
+import type { Status, ConnectionStatus } from '../types';
 
-export interface RunHistoryEntry {
-  id: string;
-  runName: string | null;
-  durationMs: number;
-  status: 'stopped' | 'error';
-  endTime: number;
-}
+export const statusConfig: Record<
+  Status,
+  { bgColor: string; text: string; animate: boolean }
+> = {
+  monitoring: {
+    bgColor: 'bg-blue-500',
+    text: 'Monitoring',
+    animate: false,
+  },
+  running: {
+    bgColor: 'bg-green-500',
+    text: 'Process Running',
+    animate: true,
+  },
+  stopped: {
+    bgColor: 'bg-yellow-500',
+    text: 'Process Finished!',
+    animate: false,
+  },
+  error: {
+    bgColor: 'bg-red-500',
+    text: 'Error!',
+    animate: false,
+  },
+  paused: {
+    bgColor: 'bg-orange-500',
+    text: 'Paused',
+    animate: false,
+  },
+};
 
-export interface TabState {
-  tabId: number;
-  windowId: number;
-  status: Status;
-  runName: string | null;
-  startTime: number | null;
-  elapsedTime: number;
-  pausedTime: number;
-  pauseStartTime: number | null;
-  history: RunHistoryEntry[];
-  error: string | null;
-  isVisible: boolean; // To control indicator visibility per tab
-}
-
-export interface GlobalState {
-  [tabId: number]: TabState;
-}
-
-export interface MessageBase {
-  type: string;
-}
-
-export interface InitMessage extends MessageBase {
-    type: 'init';
-    tabId: number;
-    state: GlobalState;
-}
-
-export interface StateUpdateMessage extends MessageBase {
-    type: 'stateUpdate';
-    state: GlobalState;
-}
-
-export interface StartRunMessage extends MessageBase {
-    type: 'startRun';
-    runName: string | null;
-}
-
-export interface StopRunMessage extends MessageBase {
-    type: 'stopRun';
-    isError?: boolean;
-    error?: string;
-}
-
-export interface PauseResumeMessage extends MessageBase {
-    type: 'pauseResume';
-}
-
-export interface CloseIndicatorMessage extends MessageBase {
-    type: 'closeIndicator';
-}
-
-export interface NavigateToTabMessage extends MessageBase {
-    type: 'navigateToTab';
-    tabId: number;
-    windowId: number;
-}
-
-export interface ErrorMessage extends MessageBase {
-    type: 'error';
-    error: string;
-}
-
-
-// Union type for messages
-export type Message =
-  | InitMessage
-  | StateUpdateMessage
-  | StartRunMessage
-  | StopRunMessage
-  | PauseResumeMessage
-  | CloseIndicatorMessage
-  | NavigateToTabMessage
-  | ErrorMessage;
-
-
-export interface NotificationContext {
-  tabId: number;
-  windowId: number;
-  durationMs?: number | null;
-  runName?: string | null;
-}
-
-export interface IndicatorProps {
-  currentTabState: TabState;
-  allTabsState: GlobalState;
-  onPauseResume: () => void;
-  onClose: () => void;
-  onNavigate: (tabId: number, windowId: number) => void;
-}
+export const connectionStatusConfig: Record<
+  ConnectionStatus,
+  { bgColor: string; text: string; animate: boolean }
+> = {
+  connecting: {
+    bgColor: 'bg-yellow-500',
+    text: 'Connecting...',
+    animate: true,
+  },
+  connected: {
+    // This is a placeholder, as 'connected' status will use the run status config.
+    bgColor: '',
+    text: '',
+    animate: false,
+  },
+  disconnected: {
+    bgColor: 'bg-orange-500',
+    text: 'Disconnected. Reconnecting...',
+    animate: true,
+  },
+  invalidated: {
+    bgColor: 'bg-red-500',
+    text: 'Error: Please reload tab',
+    animate: false,
+  },
+};
 ```
 
 ## File: .eslintrc.cjs
@@ -599,12 +522,128 @@ module.exports = {
 }
 ```
 
+## File: src/types.ts
+```typescript
+export type Status = 'monitoring' | 'running' | 'stopped' | 'error' | 'paused';
+
+export type ConnectionStatus =
+  | 'connecting'
+  | 'connected'
+  | 'disconnected'
+  | 'invalidated';
+
+export interface RunHistoryEntry {
+  id: string;
+  runName: string | null;
+  durationMs: number;
+  status: 'stopped' | 'error';
+  endTime: number;
+}
+
+export interface TabState {
+  tabId: number;
+  windowId: number;
+  status: Status;
+  runName: string | null;
+  startTime: number | null;
+  elapsedTime: number;
+  pausedTime: number;
+  pauseStartTime: number | null;
+  history: RunHistoryEntry[];
+  error: string | null;
+  isVisible: boolean; // To control indicator visibility per tab
+}
+
+export interface GlobalState {
+  [tabId: number]: TabState;
+}
+
+export interface MessageBase {
+  type: string;
+}
+
+export interface InitMessage extends MessageBase {
+    type: 'init';
+    tabId: number;
+    state: GlobalState;
+}
+
+export interface StateUpdateMessage extends MessageBase {
+    type: 'stateUpdate';
+    state: GlobalState;
+}
+
+export interface StartRunMessage extends MessageBase {
+    type: 'startRun';
+    runName: string | null;
+}
+
+export interface StopRunMessage extends MessageBase {
+    type: 'stopRun';
+    isError?: boolean;
+    error?: string;
+}
+
+export interface PauseResumeMessage extends MessageBase {
+    type: 'pauseResume';
+}
+
+export interface CloseIndicatorMessage extends MessageBase {
+    type: 'closeIndicator';
+}
+
+export interface NavigateToTabMessage extends MessageBase {
+    type: 'navigateToTab';
+    tabId: number;
+    windowId: number;
+}
+
+export interface ErrorMessage extends MessageBase {
+    type: 'error';
+    error: string;
+}
+
+
+// Union type for messages
+export type Message =
+  | InitMessage
+  | StateUpdateMessage
+  | StartRunMessage
+  | StopRunMessage
+  | PauseResumeMessage
+  | CloseIndicatorMessage
+  | NavigateToTabMessage
+  | ErrorMessage;
+
+
+export interface NotificationContext {
+  tabId: number;
+  windowId: number;
+  durationMs?: number | null;
+  runName?: string | null;
+}
+
+export interface IndicatorProps {
+  currentTabState: TabState;
+  allTabsState: GlobalState;
+  connectionStatus: ConnectionStatus;
+  onPauseResume: () => void;
+  onClose: () => void;
+  onNavigate: (tabId: number, windowId: number) => void;
+}
+```
+
 ## File: src/content/Indicator.tsx
 ```typescript
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { useMovable } from './useMovable';
-import { statusConfig } from './constants';
-import type { IndicatorProps, RunHistoryEntry, TabState } from '../types';
+import { statusConfig, connectionStatusConfig } from './constants';
+import type {
+  IndicatorProps,
+  RunHistoryEntry,
+  TabState,
+  ConnectionStatus,
+} from '../types';
 
 function formatElapsedTime(ms: number): string {
   if (ms <= 0) return '00:00';
@@ -657,6 +696,7 @@ const MIN_CONTENT_WIDTH = 200;
 function Indicator({
   currentTabState,
   allTabsState,
+  connectionStatus,
   onPauseResume,
   onClose,
   onNavigate,
@@ -789,11 +829,17 @@ function Indicator({
     return null;
   }
 
-  const config = statusConfig[currentTabState.status];
+  const isConnected = connectionStatus === 'connected';
+
+  const config = isConnected
+    ? statusConfig[currentTabState.status]
+    : connectionStatusConfig[connectionStatus];
+
   const isPausable =
-    currentTabState.status === 'running' ||
-    currentTabState.status === 'paused' ||
-    currentTabState.status === 'monitoring';
+    isConnected &&
+    (currentTabState.status === 'running' ||
+      currentTabState.status === 'paused' ||
+      currentTabState.status === 'monitoring');
 
   const totalRuns = historyTabs.reduce(
     (sum, tab) => sum + tab.history.length,
@@ -832,17 +878,20 @@ function Indicator({
             } ${config.animate ? 'animate-pulse' : ''}`}
           ></span>
           <span className="text-sm font-medium truncate">
-            {currentTabState.runName
+            {isConnected
               ? currentTabState.runName
+                ? currentTabState.runName
+                : config.text
               : config.text}
           </span>
-          {(currentTabState.status === 'running' ||
-            currentTabState.status === 'paused' ||
-            currentTabState.status === 'stopped') && (
-            <span className="text-sm font-mono text-gray-300">
-              {formatElapsedTime(currentTabState.elapsedTime)}
-            </span>
-          )}
+          {isConnected &&
+            (currentTabState.status === 'running' ||
+              currentTabState.status === 'paused' ||
+              currentTabState.status === 'stopped') && (
+              <span className="text-sm font-mono text-gray-300">
+                {formatElapsedTime(currentTabState.elapsedTime)}
+              </span>
+            )}
         </div>
         <div className="flex items-center flex-shrink-0">
           {isPausable && (
@@ -897,14 +946,16 @@ function Indicator({
           </button>
         </div>
       </div>
-      {currentTabState.status === 'error' && currentTabState.error && (
-        <p className="text-xs text-red-400 px-2 pb-2 -mt-1">
-          {currentTabState.error}
-        </p>
-      )}
+      {isConnected &&
+        currentTabState.status === 'error' &&
+        currentTabState.error && (
+          <p className="text-xs text-red-400 px-2 pb-2 -mt-1">
+            {currentTabState.error}
+          </p>
+        )}
 
       {/* Expanded History View */}
-      {isExpanded && (
+      {isConnected && isExpanded && (
         <>
           <div className="flex-grow flex border-t border-white/20 min-h-0">
             {/* Sidebar */}
@@ -1020,7 +1071,7 @@ export default Indicator;
 ```typescript
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Indicator from './Indicator';
-import type { GlobalState } from '../types';
+import type { GlobalState, ConnectionStatus } from '../types';
 
 /**
  * Captures the current tab's title to use as the run name.
@@ -1046,35 +1097,113 @@ function captureRunContext(): string | null {
 function App() {
   const [tabId, setTabId] = useState<number | null>(null);
   const [globalState, setGlobalState] = useState<GlobalState>({});
+  const [connectionStatus, setConnectionStatus] =
+    useState<ConnectionStatus>('connecting');
   const lastKnownStopButtonState = useRef<boolean>(false);
   const portRef = useRef<chrome.runtime.Port | null>(null);
 
   useEffect(() => {
-    portRef.current = chrome.runtime.connect({ name: 'content-script' });
+    let port: chrome.runtime.Port | null = null;
+    let isInvalidated = false;
+    let reconnectTimeoutId: number | undefined;
 
-    portRef.current.onMessage.addListener((message: any) => {
-      if (message.type === 'init') {
-        setTabId(message.tabId);
-        setGlobalState(message.state);
-      } else if (message.type === 'stateUpdate') {
-        setGlobalState(message.state);
+    function connect() {
+      // Don't try to connect if the context is known to be invalid
+      if (isInvalidated) return;
+      setConnectionStatus('connecting');
+
+      try {
+        // Accessing chrome.runtime.id will throw if context is invalidated
+        if (!chrome.runtime?.id) {
+          isInvalidated = true;
+          setConnectionStatus('invalidated');
+          console.error(
+            'AI Studio Notifier: Extension context invalidated. Cannot connect.'
+          );
+          return;
+        }
+
+        port = chrome.runtime.connect({ name: 'content-script' });
+        portRef.current = port;
+
+        port.onMessage.addListener((message: any) => {
+          setConnectionStatus('connected');
+          if (message.type === 'init') {
+            setTabId(message.tabId);
+            setGlobalState(message.state);
+          } else if (message.type === 'stateUpdate') {
+            setGlobalState(message.state);
+          }
+        });
+
+        port.onDisconnect.addListener(() => {
+          portRef.current = null;
+          port = null;
+          // If the disconnect was not from an invalidated context, try to reconnect.
+          if (chrome.runtime?.id) {
+            setConnectionStatus('disconnected');
+            console.log(
+              'AI Studio Notifier: Port disconnected. Reconnecting in 1s...'
+            );
+            if (reconnectTimeoutId) clearTimeout(reconnectTimeoutId);
+            reconnectTimeoutId = setTimeout(connect, 1000);
+          } else {
+            setConnectionStatus('invalidated');
+            console.error(
+              'AI Studio Notifier: Port disconnected due to invalidated context.'
+            );
+            isInvalidated = true;
+          }
+        });
+      } catch (e) {
+        portRef.current = null;
+        port = null;
+        console.error(
+          'AI Studio Notifier: Connection to background script failed:',
+          e
+        );
+        if (e instanceof Error && e.message.includes('context invalidated')) {
+          isInvalidated = true;
+          setConnectionStatus('invalidated');
+        } else {
+          setConnectionStatus('disconnected');
+          // Retry connection after a delay if it's not a fatal error
+          if (reconnectTimeoutId) clearTimeout(reconnectTimeoutId);
+          reconnectTimeoutId = setTimeout(connect, 5000);
+        }
       }
-    });
+    }
 
-    const port = portRef.current;
+    connect();
+
     return () => {
-      port.disconnect();
+      if (reconnectTimeoutId) {
+        clearTimeout(reconnectTimeoutId);
+      }
+      // The port object might be from a previous connect attempt, so check it
+      if (port) {
+        port.disconnect();
+      }
       portRef.current = null;
     };
-  }, []);
+  }, []); // This effect runs only once on component mount
 
   const postMessage = useCallback((message: any) => {
+    if (!portRef.current) {
+      console.error(
+        'AI Studio Notifier: Cannot post message, port is not connected. It may be sent after reconnection.'
+      );
+      return;
+    }
+
     try {
-      if (portRef.current) {
-        portRef.current.postMessage(message);
-      }
+      portRef.current.postMessage(message);
     } catch (e) {
-      console.warn('Could not post message, port may be disconnected.', e);
+      console.warn(
+        'AI Studio Notifier: Could not post message. The port was likely disconnected just now.',
+        e
+      );
+      // The onDisconnect listener will handle reconnection.
     }
   }, []);
 
@@ -1146,6 +1275,7 @@ function App() {
     <Indicator
       currentTabState={currentTabState}
       allTabsState={globalState}
+      connectionStatus={connectionStatus}
       onPauseResume={handlePauseResume}
       onClose={handleClose}
       onNavigate={handleNavigate}

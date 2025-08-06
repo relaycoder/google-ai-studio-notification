@@ -1,0 +1,399 @@
+uuid: 4f14a600-4710-4412-850d-d42a98f45a27
+projectId: google-ai-studio-notification
+createdAt: '2025-08-06T09:54:25.663Z'
+linesAdded: 84
+linesRemoved: 56
+gitCommitMsg: 'fix(content): implement robust connection handling'
+promptSummary: >-
+  The user is reporting errors with the extension when used across multiple
+  Chrome profiles, specifically `Cannot post message, port is not connected` and
+  `Extension context invalidated`. I need to fix the connection handling logic
+  in the content script to be more robust against these scenarios.
+reasoning:
+  - >-
+    I've analyzed the issue concerning errors when using the extension across
+    multiple Chrome profiles. The root cause appears to be related to how the
+    content script (`App.tsx`) manages its connection to the background script,
+    especially when the extension's context becomes invalidated (e.g., during an
+    extension update, or potentially when switching profiles rapidly). The
+    existing connection logic was not robust enough to handle these scenarios,
+    leading to repeated connection failures and errors.
+  - >-
+    I will refactor the connection management logic in `src/content/App.tsx` to
+    be more resilient. Here's what the new implementation does:
+  - >-
+    1.  **Robust Connection Lifecycle**: It establishes a long-lived connection
+    within a `useEffect` hook that runs once when the component mounts.
+  - >-
+    2.  **Automatic Reconnection**: If the connection drops for a recoverable
+    reason, it will automatically try to reconnect after a short delay.
+  - >-
+    3.  **Handles Invalidated Context**: It detects when the extension context
+    is invalidated (the cause of the `Error: Extension context invalidated.`)
+    and will stop trying to reconnect, preventing infinite error loops.
+  - >-
+    4.  **Fixes Stale Closures**: The previous implementation had a potential
+    bug with stale state setters in event listeners. The new approach resolves
+    this by setting up listeners correctly within the `useEffect` hook.
+  - >-
+    This change should make the extension much more stable, especially in
+    multi-profile environments or during development with frequent reloads.
+  - '---'
+operations:
+  - type: write
+    path: src/content/App.tsx
+    content: |-
+      <<<<<<< SEARCH
+        const portRef = useRef<chrome.runtime.Port | null>(null);
+
+        // This function will be responsible for ensuring a connection exists.
+        const ensureConnection = useCallback(() => {
+          if (portRef.current) {
+            return;
+          }
+
+          try {
+            portRef.current = chrome.runtime.connect({ name: 'content-script' });
+
+            // Handle disconnection
+            portRef.current.onDisconnect.addListener(() => {
+              portRef.current = null;
+              console.log(
+                'AI Studio Notifier: Port disconnected. It will be reconnected on the next action.'
+              );
+            });
+
+            // Handle incoming messages
+            portRef.current.onMessage.addListener((message: any) => {
+              if (message.type === 'init') {
+                setTabId(message.tabId);
+                setGlobalState(message.state);
+              } else if (message.type === 'stateUpdate') {
+                setGlobalState(message.state);
+              }
+            });
+          } catch (e) {
+            console.error(
+              'AI Studio Notifier: Connection to background script failed:',
+              e
+            );
+            portRef.current = null; // Ensure it's null on failure
+          }
+        }, []);
+
+        useEffect(() => {
+          ensureConnection();
+
+          return () => {
+            if (portRef.current) {
+              portRef.current.disconnect();
+              portRef.current = null;
+            }
+          };
+        }, [ensureConnection]);
+
+        const postMessage = useCallback(
+          (message: any) => {
+            // Ensure connection exists before posting a message.
+            ensureConnection();
+
+            if (!portRef.current) {
+              console.error(
+                'AI Studio Notifier: Cannot post message, port is not connected.'
+              );
+              return;
+            }
+
+            try {
+              portRef.current.postMessage(message);
+            } catch (e) {
+              console.warn(
+                'AI Studio Notifier: Could not post message. The port may have been disconnected just now.',
+                e
+              );
+            }
+          },
+          [ensureConnection]
+        );
+      =======
+        const portRef = useRef<chrome.runtime.Port | null>(null);
+
+        useEffect(() => {
+          let port: chrome.runtime.Port | null = null;
+          let isInvalidated = false;
+          let reconnectTimeoutId: number | undefined;
+
+          function connect() {
+            // Don't try to connect if the context is known to be invalid
+            if (isInvalidated) return;
+
+            try {
+              // Accessing chrome.runtime.id will throw if context is invalidated
+              if (!chrome.runtime?.id) {
+                isInvalidated = true;
+                console.error(
+                  'AI Studio Notifier: Extension context invalidated. Cannot connect.'
+                );
+                return;
+              }
+
+              port = chrome.runtime.connect({ name: 'content-script' });
+              portRef.current = port;
+
+              port.onMessage.addListener((message: any) => {
+                if (message.type === 'init') {
+                  setTabId(message.tabId);
+                  setGlobalState(message.state);
+                } else if (message.type === 'stateUpdate') {
+                  setGlobalState(message.state);
+                }
+              });
+
+              port.onDisconnect.addListener(() => {
+                portRef.current = null;
+                port = null;
+                // If the disconnect was not from an invalidated context, try to reconnect.
+                if (chrome.runtime?.id) {
+                  console.log(
+                    'AI Studio Notifier: Port disconnected. Reconnecting in 1s...'
+                  );
+                  if (reconnectTimeoutId) clearTimeout(reconnectTimeoutId);
+                  reconnectTimeoutId = setTimeout(connect, 1000);
+                } else {
+                  console.error(
+                    'AI Studio Notifier: Port disconnected due to invalidated context.'
+                  );
+                  isInvalidated = true;
+                }
+              });
+            } catch (e) {
+              portRef.current = null;
+              port = null;
+              console.error(
+                'AI Studio Notifier: Connection to background script failed:',
+                e
+              );
+              if (e instanceof Error && e.message.includes('context invalidated')) {
+                isInvalidated = true;
+              } else {
+                // Retry connection after a delay if it's not a fatal error
+                if (reconnectTimeoutId) clearTimeout(reconnectTimeoutId);
+                reconnectTimeoutId = setTimeout(connect, 5000);
+              }
+            }
+          }
+
+          connect();
+
+          return () => {
+            if (reconnectTimeoutId) {
+              clearTimeout(reconnectTimeoutId);
+            }
+            // The port object might be from a previous connect attempt, so check it
+            if (port) {
+              port.disconnect();
+            }
+            portRef.current = null;
+          };
+        }, []); // This effect runs only once on component mount
+
+        const postMessage = useCallback((message: any) => {
+          if (!portRef.current) {
+            console.error(
+              'AI Studio Notifier: Cannot post message, port is not connected. It may be sent after reconnection.'
+            );
+            return;
+          }
+
+          try {
+            portRef.current.postMessage(message);
+          } catch (e) {
+            console.warn(
+              'AI Studio Notifier: Could not post message. The port was likely disconnected just now.',
+              e
+            );
+            // The onDisconnect listener will handle reconnection.
+          }
+        }, []);
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+snapshot:
+  src/content/App.tsx: |-
+    import { useState, useEffect, useCallback, useRef } from 'react';
+    import Indicator from './Indicator';
+    import type { GlobalState } from '../types';
+
+    /**
+     * Captures the current tab's title to use as the run name.
+     * This makes notifications more informative.
+     * @returns The tab's title, or null if it's empty.
+     */
+    function captureRunContext(): string | null {
+      try {
+        const title = document.title?.trim();
+        if (title) {
+          // Clean up the title, e.g., remove " - Google AI Studio"
+          return title.replace(/ - Google AI Studio$/, '').trim();
+        }
+      } catch (e) {
+        console.error(
+          'AI Studio Notifier: Error capturing run context from tab title.',
+          e
+        );
+      }
+      return null;
+    }
+
+    function App() {
+      const [tabId, setTabId] = useState<number | null>(null);
+      const [globalState, setGlobalState] = useState<GlobalState>({});
+      const lastKnownStopButtonState = useRef<boolean>(false);
+      const portRef = useRef<chrome.runtime.Port | null>(null);
+
+      // This function will be responsible for ensuring a connection exists.
+      const ensureConnection = useCallback(() => {
+        if (portRef.current) {
+          return;
+        }
+
+        try {
+          portRef.current = chrome.runtime.connect({ name: 'content-script' });
+
+          // Handle disconnection
+          portRef.current.onDisconnect.addListener(() => {
+            portRef.current = null;
+            console.log(
+              'AI Studio Notifier: Port disconnected. It will be reconnected on the next action.'
+            );
+          });
+
+          // Handle incoming messages
+          portRef.current.onMessage.addListener((message: any) => {
+            if (message.type === 'init') {
+              setTabId(message.tabId);
+              setGlobalState(message.state);
+            } else if (message.type === 'stateUpdate') {
+              setGlobalState(message.state);
+            }
+          });
+        } catch (e) {
+          console.error(
+            'AI Studio Notifier: Connection to background script failed:',
+            e
+          );
+          portRef.current = null; // Ensure it's null on failure
+        }
+      }, []);
+
+      useEffect(() => {
+        ensureConnection();
+
+        return () => {
+          if (portRef.current) {
+            portRef.current.disconnect();
+            portRef.current = null;
+          }
+        };
+      }, [ensureConnection]);
+
+      const postMessage = useCallback(
+        (message: any) => {
+          // Ensure connection exists before posting a message.
+          ensureConnection();
+
+          if (!portRef.current) {
+            console.error(
+              'AI Studio Notifier: Cannot post message, port is not connected.'
+            );
+            return;
+          }
+
+          try {
+            portRef.current.postMessage(message);
+          } catch (e) {
+            console.warn(
+              'AI Studio Notifier: Could not post message. The port may have been disconnected just now.',
+              e
+            );
+          }
+        },
+        [ensureConnection]
+      );
+
+      const checkState = useCallback(() => {
+        if (!tabId) return;
+        const currentTabState = globalState[tabId];
+        if (!currentTabState || currentTabState.status === 'paused') {
+          return;
+        }
+
+        try {
+          const stopButtonExists = !!document.querySelector<SVGRectElement>(
+            'rect[class*="stoppable-stop"]'
+          );
+          if (stopButtonExists !== lastKnownStopButtonState.current) {
+            lastKnownStopButtonState.current = stopButtonExists;
+            if (stopButtonExists) {
+              postMessage({ type: 'startRun', runName: captureRunContext() });
+            } else {
+              postMessage({ type: 'stopRun' });
+            }
+          }
+        } catch (e) {
+          console.error('AI Studio Notifier: Error during state check.', e);
+          postMessage({ type: 'error', error: 'An error occurred during check.' });
+        }
+      }, [globalState, tabId, postMessage]);
+
+      useEffect(() => {
+        if (!tabId) return;
+        const currentTabState = globalState[tabId];
+        if (currentTabState?.status === 'paused') {
+          return;
+        }
+
+        const timeoutId = setTimeout(checkState, 1000);
+        const observer = new MutationObserver(checkState);
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        return () => {
+          clearTimeout(timeoutId);
+          observer.disconnect();
+        };
+      }, [checkState, tabId, globalState]);
+
+      const handlePauseResume = useCallback(
+        () => postMessage({ type: 'pauseResume' }),
+        [postMessage]
+      );
+      const handleClose = useCallback(
+        () => postMessage({ type: 'closeIndicator' }),
+        [postMessage]
+      );
+      const handleNavigate = useCallback(
+        (navTabId: number, windowId: number) => {
+          postMessage({ type: 'navigateToTab', tabId: navTabId, windowId });
+        },
+        [postMessage]
+      );
+
+      if (!tabId || !globalState[tabId]?.isVisible) {
+        return null;
+      }
+
+      const currentTabState = globalState[tabId];
+      if (!currentTabState) return null; // Should not happen if tabId is set
+
+      return (
+        <Indicator
+          currentTabState={currentTabState}
+          allTabsState={globalState}
+          onPauseResume={handlePauseResume}
+          onClose={handleClose}
+          onNavigate={handleNavigate}
+        />
+      );
+    }
+
+    export default App;
+approved: true

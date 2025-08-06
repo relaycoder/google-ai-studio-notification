@@ -12,6 +12,8 @@ const STATE_KEY = 'ai-studio-tracker-state';
 let state: GlobalState = {};
 let timerInterval: number | undefined;
 let ports: { [tabId: number]: chrome.runtime.Port } = {};
+let lastActiveTabId: number | null = null;
+let isWindowFocused = true; // Assume focused at startup
 
 async function getState(): Promise<GlobalState> {
   const result = await chrome.storage.local.get(STATE_KEY);
@@ -287,6 +289,48 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   }
 });
 
+// --- Standby Logic for Inactive Tabs ---
+
+async function updateStandbyStates() {
+  const currentState = await getState();
+  let changed = false;
+  for (const tabIdStr in currentState) {
+    const tabId = parseInt(tabIdStr, 10);
+    const tab = currentState[tabId];
+    if (tab.status === 'monitoring' || tab.status === 'standby') {
+      const shouldBeActive = isWindowFocused && tabId === lastActiveTabId;
+      if (shouldBeActive && tab.status === 'standby') {
+        tab.status = 'monitoring';
+        changed = true;
+      } else if (!shouldBeActive && tab.status === 'monitoring') {
+        tab.status = 'standby';
+        changed = true;
+      }
+    }
+  }
+  if (changed) {
+    await setState(currentState);
+  }
+}
+
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  lastActiveTabId = activeInfo.tabId;
+  const window = await chrome.windows.get(activeInfo.windowId);
+  isWindowFocused = window.focused;
+  await updateStandbyStates();
+});
+
+chrome.windows.onFocusChanged.addListener(async (windowId) => {
+  isWindowFocused = windowId !== chrome.windows.WINDOW_ID_NONE;
+  if (isWindowFocused) {
+    const [activeTab] = await chrome.tabs.query({ active: true, windowId });
+    if (activeTab?.id) {
+      lastActiveTabId = activeTab.id;
+    }
+  }
+  await updateStandbyStates();
+});
+
 
 // --- Notification Logic ---
 
@@ -414,6 +458,19 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   state = await getState();
   console.log('AI Studio Notifier: Background state loaded.');
 
+  // Set initial focus and active tab for standby logic
+  try {
+    const [activeTab] = await chrome.tabs.query({
+      active: true,
+      lastFocusedWindow: true,
+    });
+    const lastFocusedWindow = await chrome.windows.getLastFocused();
+    isWindowFocused = lastFocusedWindow?.focused ?? true;
+    lastActiveTabId = activeTab?.id ?? null;
+  } catch (e) {
+    console.warn('Could not determine active tab at startup.');
+  }
+
   const tabs = await chrome.tabs.query({});
   const existingTabIds = new Set(tabs.map((t) => t.id).filter(Boolean));
   const stateTabIds = Object.keys(state).map(Number);
@@ -433,4 +490,6 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (Object.values(state).some((t) => t.status === 'running')) {
     ensureTimerIsRunning();
   }
+
+  await updateStandbyStates();
 })();
