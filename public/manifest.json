@@ -15,7 +15,10 @@
         "https://kimi.com/chat/*",
         "https://kimi.moonshot.cn/chat/*",
         "https://chat.qwen.ai/c/*",
-        "https://openrouter.ai/*"
+        "https://openrouter.ai/*",
+        "https://chatgpt.com/*",
+        "https://gemini.google.com/app/*",
+        "https://grok.com/chat/*"
       ],
       "js": ["content.js"],
       "css": ["content.css"]

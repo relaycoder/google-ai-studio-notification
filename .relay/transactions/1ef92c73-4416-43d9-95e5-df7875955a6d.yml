@@ -1,0 +1,167 @@
+uuid: 1ef92c73-4416-43d9-95e5-df7875955a6d
+projectId: google-ai-studio-notification
+createdAt: '2025-08-07T03:35:51.929Z'
+linesAdded: 19
+linesRemoved: 1
+gitCommitMsg: 'feat: add support for ChatGPT, Gemini, and Grok'
+promptSummary: >-
+  Add support for ChatGPT, Grok, and Gemini by updating site configurations and
+  manifest permissions.
+reasoning:
+  - >-
+    I will add support for ChatGPT, Gemini, and Grok by updating the list of
+    supported sites and the extension's manifest file.
+  - >-
+    First, I'll add the configuration for the new sites to
+    `src/content/sites.ts`. This includes their URL match patterns and the CSS
+    selector to identify when a process is running (i.e., when a "stop" button
+    is visible).
+  - '-   For **ChatGPT**, the selector is `button[data-testid="stop-button"]`.'
+  - >-
+    -   For **Gemini**, the selector `button.stop[aria-label="Stop response"]`
+    is a robust choice based on the provided HTML.
+  - >-
+    -   For **Grok**, the provided HTML for the "processing" state was for an
+    "Attach" button, which is likely incorrect. I will use
+    `button[aria-label="Stop generating"]` as an educated guess, following the
+    pattern of other AI chat sites where a button's ARIA label indicates it can
+    stop the generation.
+  - >-
+    Next, I'll update the `public/manifest.json` file to allow the content
+    script to run on these new sites. I'll add the new URL patterns to the
+    `matches` array.
+  - >-
+    These changes will enable the extension to monitor ChatGPT, Gemini, and Grok
+    for running processes.
+operations:
+  - type: write
+    path: src/content/sites.ts
+    content: |-
+      <<<<<<< SEARCH
+              selector:
+                'path[d="M4.5 7.5a3 3 0 0 1 3-3h9a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-9Z"]',
+            },
+          ];
+      =======
+              selector:
+                'path[d="M4.5 7.5a3 3 0 0 1 3-3h9a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-9Z"]',
+            },
+            {
+              name: 'ChatGPT',
+              matches: ['https://chatgpt.com/*'],
+              selector: 'button[data-testid="stop-button"]',
+            },
+            {
+              name: 'Gemini',
+              matches: ['https://gemini.google.com/app/*'],
+              selector: 'button.stop[aria-label="Stop response"]',
+            },
+            {
+              name: 'Grok',
+              matches: ['https://grok.com/chat/*'],
+              selector: 'button[aria-label="Stop generating"]',
+            },
+          ];
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+  - type: write
+    path: public/manifest.json
+    content: |-
+      <<<<<<< SEARCH
+            "matches": [
+              "https://aistudio.google.com/*",
+              "https://www.kimi.com/chat/*",
+              "https://kimi.com/chat/*",
+              "https://kimi.moonshot.cn/chat/*",
+              "https://chat.qwen.ai/c/*",
+              "https://openrouter.ai/*"
+            ],
+      =======
+            "matches": [
+              "https://aistudio.google.com/*",
+              "https://www.kimi.com/chat/*",
+              "https://kimi.com/chat/*",
+              "https://kimi.moonshot.cn/chat/*",
+              "https://chat.qwen.ai/c/*",
+              "https://openrouter.ai/*",
+              "https://chatgpt.com/*",
+              "https://gemini.google.com/app/*",
+              "https://grok.com/chat/*"
+            ],
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+snapshot:
+  src/content/sites.ts: |-
+    export interface Site {
+      name: string;
+      matches: string[];
+      selector: string;
+    }
+
+    export const sites: Site[] = [
+      {
+        name: 'Google AI Studio',
+        matches: ['https://aistudio.google.com/*'],
+        selector: "rect[class*='stoppable-stop']",
+      },
+      {
+        name: 'Kimi Chat',
+        matches: [
+          'https://www.kimi.com/chat/*',
+          'https://kimi.com/chat/*',
+          'https://kimi.moonshot.cn/chat/*',
+        ],
+        selector: "svg[name='stop']",
+      },
+      {
+        name: 'Qwen Chat',
+        matches: ['https://chat.qwen.ai/c/*'],
+        selector: 'button i.icon-StopIcon',
+      },
+      {
+        name: 'OpenRouter',
+        matches: ['https://openrouter.ai/chat*'],
+        selector:
+          'path[d="M4.5 7.5a3 3 0 0 1 3-3h9a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-9Z"]',
+      },
+    ];
+  public/manifest.json: |-
+    {
+      "manifest_version": 3,
+      "name": "AI Studio Notifier",
+      "version": "1.3.0",
+      "description": "Plays a sound and shows a notification when a process in Google AI Studio finishes.",
+      "permissions": ["notifications", "alarms", "storage"],
+      "background": {
+        "service_worker": "background.js"
+      },
+      "content_scripts": [
+        {
+          "matches": [
+            "https://aistudio.google.com/*",
+            "https://www.kimi.com/chat/*",
+            "https://kimi.com/chat/*",
+            "https://kimi.moonshot.cn/chat/*",
+            "https://chat.qwen.ai/c/*",
+            "https://openrouter.ai/*"
+          ],
+          "js": ["content.js"],
+          "css": ["content.css"]
+        }
+      ],
+      "web_accessible_resources": [
+        {
+          "resources": ["notification.mp3", "icon128.png", "icon48.png"],
+          "matches": ["<all_urls>"]
+        }
+      ],
+      "icons": {
+        "48": "icon48.png",
+        "128": "icon128.png"
+      },
+      "action": {
+        "default_title": "AI Studio Notifier",
+        "default_icon": "icon128.png"
+      }
+    }
+approved: true

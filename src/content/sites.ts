@@ -30,4 +30,19 @@ export const sites: Site[] = [
     selector:
       'path[d="M4.5 7.5a3 3 0 0 1 3-3h9a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-9Z"]',
   },
+  {
+    name: 'ChatGPT',
+    matches: ['https://chatgpt.com/*'],
+    selector: 'button[data-testid="stop-button"]',
+  },
+  {
+    name: 'Gemini',
+    matches: ['https://gemini.google.com/app/*'],
+    selector: 'button.stop[aria-label="Stop response"]',
+  },
+  {
+    name: 'Grok',
+    matches: ['https://grok.com/chat/*'],
+    selector: 'button[aria-label="Stop generating"]',
+  },
 ];

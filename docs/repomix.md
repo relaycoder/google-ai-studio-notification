@@ -45,37 +45,6 @@ root.render(
 );
 ```
 
-## File: src/content/sites.ts
-```typescript
-export interface Site {
-  name: string;
-  matches: string[];
-  selector: string;
-}
-
-export const sites: Site[] = [
-  {
-    name: 'Google AI Studio',
-    matches: ['https://aistudio.google.com/*'],
-    selector: "rect[class*='stoppable-stop']",
-  },
-  {
-    name: 'Kimi Chat',
-    matches: [
-      'https://www.kimi.com/chat/*',
-      'https://kimi.com/chat/*',
-      'https://kimi.moonshot.cn/chat/*',
-    ],
-    selector: "svg[name='stop']",
-  },
-  {
-    name: 'Qwen Chat',
-    matches: ['https://chat.qwen.ai/c/*'],
-    selector: 'button i.icon-StopIcon',
-  },
-];
-```
-
 ## File: src/content/style.css
 ```css
 @tailwind base;
@@ -392,45 +361,41 @@ export default defineConfig({
 });
 ```
 
-## File: public/manifest.json
-```json
-{
-  "manifest_version": 3,
-  "name": "AI Studio Notifier",
-  "version": "1.3.0",
-  "description": "Plays a sound and shows a notification when a process in Google AI Studio finishes.",
-  "permissions": ["notifications", "alarms", "storage"],
-  "background": {
-    "service_worker": "background.js"
-  },
-  "content_scripts": [
-    {
-      "matches": [
-        "https://aistudio.google.com/*",
-        "https://www.kimi.com/chat/*",
-        "https://kimi.com/chat/*",
-        "https://kimi.moonshot.cn/chat/*",
-        "https://chat.qwen.ai/c/*"
-      ],
-      "js": ["content.js"],
-      "css": ["content.css"]
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["notification.mp3", "icon128.png", "icon48.png"],
-      "matches": ["<all_urls>"]
-    }
-  ],
-  "icons": {
-    "48": "icon48.png",
-    "128": "icon128.png"
-  },
-  "action": {
-    "default_title": "AI Studio Notifier",
-    "default_icon": "icon128.png"
-  }
+## File: src/content/sites.ts
+```typescript
+export interface Site {
+  name: string;
+  matches: string[];
+  selector: string;
 }
+
+export const sites: Site[] = [
+  {
+    name: 'Google AI Studio',
+    matches: ['https://aistudio.google.com/*'],
+    selector: "rect[class*='stoppable-stop']",
+  },
+  {
+    name: 'Kimi Chat',
+    matches: [
+      'https://www.kimi.com/chat/*',
+      'https://kimi.com/chat/*',
+      'https://kimi.moonshot.cn/chat/*',
+    ],
+    selector: "svg[name='stop']",
+  },
+  {
+    name: 'Qwen Chat',
+    matches: ['https://chat.qwen.ai/c/*'],
+    selector: 'button i.icon-StopIcon',
+  },
+  {
+    name: 'OpenRouter',
+    matches: ['https://openrouter.ai/chat*'],
+    selector:
+      'path[d="M4.5 7.5a3 3 0 0 1 3-3h9a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-9Z"]',
+  },
+];
 ```
 
 ## File: .eslintrc.cjs
@@ -531,6 +496,48 @@ module.exports = {
   },
   "include": ["src", "vite.config.ts", "tailwind.config.js", "postcss.config.js"],
   "exclude": ["node_modules", "dist"]
+}
+```
+
+## File: public/manifest.json
+```json
+{
+  "manifest_version": 3,
+  "name": "AI Studio Notifier",
+  "version": "1.3.0",
+  "description": "Plays a sound and shows a notification when a process in Google AI Studio finishes.",
+  "permissions": ["notifications", "alarms", "storage"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://aistudio.google.com/*",
+        "https://www.kimi.com/chat/*",
+        "https://kimi.com/chat/*",
+        "https://kimi.moonshot.cn/chat/*",
+        "https://chat.qwen.ai/c/*",
+        "https://openrouter.ai/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["notification.mp3", "icon128.png", "icon48.png"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "action": {
+    "default_title": "AI Studio Notifier",
+    "default_icon": "icon128.png"
+  }
 }
 ```
 
