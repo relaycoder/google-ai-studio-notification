@@ -1,0 +1,125 @@
+uuid: 4de48943-7313-4318-8742-12e3e5c9b634
+projectId: google-ai-studio-notification
+createdAt: '2025-08-07T03:42:10.278Z'
+linesAdded: 3
+linesRemoved: 3
+gitCommitMsg: 'fix(selectors): Improve selectors for ChatGPT, Gemini, and Grok'
+promptSummary: >-
+  The user wants to improve the selectors for ChatGPT, Gemini, and Grok as the
+  current ones are not working reliably. I've updated the selectors based on the
+  provided HTML snippets and best practices for robust element selection.
+reasoning:
+  - >-
+    Based on your request to improve the selectors for ChatGPT, Gemini, and
+    Grok, I've analyzed the provided HTML snippets and updated the selectors in
+    `src/content/sites.ts` to be more robust.
+  - 'Here''s a breakdown of the changes:'
+  - >-
+    1.  **ChatGPT**: The original selector `button[data-testid="stop-button"]`
+    was already good, but based on the provided HTML, `aria-label="Stop
+    streaming"` is also present and very descriptive. I've switched to using
+    `button[aria-label="Stop streaming"]` as it's less likely to be a temporary
+    test ID and clearly describes the button's function.
+  - >-
+    2.  **Gemini**: You mentioned the selector `button.stop[aria-label="Stop
+    response"]` wasn't working well. The provided HTML shows a specific material
+    icon, `<mat-icon ... fonticon="stop" ...>`, is present only when the process
+    is running. I've changed the selector to `mat-icon[fonticon="stop"]` to
+    directly target this unique icon, which should be a more reliable signal.
+  - >-
+    3.  **Grok**: You reported issues with `button[aria-label="Stop
+    generating"]` and provided HTML that didn't include the stop button. To make
+    the selector more flexible, I've changed it to `[aria-label="Stop
+    generating"]`. This will match any element with that `aria-label`, not just
+    a `<button>`, which could resolve the issue if the label is on a different
+    type of element like a `<div>`.
+  - These changes should improve the detection accuracy for these sites.
+operations:
+  - type: write
+    path: src/content/sites.ts
+    content: |-
+      <<<<<<< SEARCH
+        {
+          name: 'ChatGPT',
+          matches: ['https://chatgpt.com/*'],
+          selector: 'button[data-testid="stop-button"]',
+        },
+        {
+          name: 'Gemini',
+          matches: ['https://gemini.google.com/app/*'],
+          selector: 'button.stop[aria-label="Stop response"]',
+        },
+        {
+          name: 'Grok',
+          matches: ['https://grok.com/chat/*'],
+          selector: 'button[aria-label="Stop generating"]',
+        },
+      =======
+        {
+          name: 'ChatGPT',
+          matches: ['https://chatgpt.com/*'],
+          selector: 'button[aria-label="Stop streaming"]',
+        },
+        {
+          name: 'Gemini',
+          matches: ['https://gemini.google.com/app/*'],
+          selector: 'mat-icon[fonticon="stop"]',
+        },
+        {
+          name: 'Grok',
+          matches: ['https://grok.com/chat/*'],
+          selector: '[aria-label="Stop generating"]',
+        },
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+snapshot:
+  src/content/sites.ts: |-
+    export interface Site {
+      name: string;
+      matches: string[];
+      selector: string;
+    }
+
+    export const sites: Site[] = [
+      {
+        name: 'Google AI Studio',
+        matches: ['https://aistudio.google.com/*'],
+        selector: "rect[class*='stoppable-stop']",
+      },
+      {
+        name: 'Kimi Chat',
+        matches: [
+          'https://www.kimi.com/chat/*',
+          'https://kimi.com/chat/*',
+          'https://kimi.moonshot.cn/chat/*',
+        ],
+        selector: "svg[name='stop']",
+      },
+      {
+        name: 'Qwen Chat',
+        matches: ['https://chat.qwen.ai/c/*'],
+        selector: 'button i.icon-StopIcon',
+      },
+      {
+        name: 'OpenRouter',
+        matches: ['https://openrouter.ai/chat*'],
+        selector:
+          'path[d="M4.5 7.5a3 3 0 0 1 3-3h9a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-9Z"]',
+      },
+      {
+        name: 'ChatGPT',
+        matches: ['https://chatgpt.com/*'],
+        selector: 'button[data-testid="stop-button"]',
+      },
+      {
+        name: 'Gemini',
+        matches: ['https://gemini.google.com/app/*'],
+        selector: 'button.stop[aria-label="Stop response"]',
+      },
+      {
+        name: 'Grok',
+        matches: ['https://grok.com/chat/*'],
+        selector: 'button[aria-label="Stop generating"]',
+      },
+    ];
+approved: true

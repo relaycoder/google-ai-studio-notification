@@ -33,16 +33,16 @@ export const sites: Site[] = [
   {
     name: 'ChatGPT',
     matches: ['https://chatgpt.com/*'],
-    selector: 'button[data-testid="stop-button"]',
+    selector: 'button[aria-label="Stop streaming"]',
   },
   {
     name: 'Gemini',
     matches: ['https://gemini.google.com/app/*'],
-    selector: 'button.stop[aria-label="Stop response"]',
+    selector: 'mat-icon[fonticon="stop"]',
   },
   {
     name: 'Grok',
     matches: ['https://grok.com/chat/*'],
-    selector: 'button[aria-label="Stop generating"]',
+    selector: '[aria-label="Stop generating"]',
   },
 ];
