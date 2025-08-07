@@ -10,7 +10,98 @@ but google ai studio is fine
 
 after using site.json the floating indicator is not showing likely its not triggered
 
+
 ===
+
+chat gpt
+
+https://chatgpt.com/*
+
+the button state are
+
+<button data-testid="composer-speech-button" aria-label="Start voice mode" class="relative flex h-9 items-center justify-center rounded-full disabled:text-gray-50 disabled:opacity-30 min-w-8 p-2 composer-secondary-button-color hover:opacity-80" style="view-transition-name: var(--vt-composer-speech-button);"><div class="flex items-center justify-center"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="icon"><path d="M7.33496 15.5V4.5C7.33496 4.13275 7.63275 3.83499 8 3.83496C8.36727 3.83496 8.66504 4.13273 8.66504 4.5V15.5C8.66504 15.8673 8.36727 16.165 8 16.165C7.63275 16.165 7.33496 15.8673 7.33496 15.5ZM11.335 13.1309V7.20801C11.335 6.84075 11.6327 6.54298 12 6.54297C12.3673 6.54297 12.665 6.84074 12.665 7.20801V13.1309C12.665 13.4981 12.3672 13.7959 12 13.7959C11.6328 13.7959 11.335 13.4981 11.335 13.1309ZM3.33496 11.3535V8.81543C3.33496 8.44816 3.63273 8.15039 4 8.15039C4.36727 8.15039 4.66504 8.44816 4.66504 8.81543V11.3535C4.66504 11.7208 4.36727 12.0186 4 12.0186C3.63273 12.0186 3.33496 11.7208 3.33496 11.3535ZM15.335 11.3535V8.81543C15.335 8.44816 15.6327 8.15039 16 8.15039C16.3673 8.15039 16.665 8.44816 16.665 8.81543V11.3535C16.665 11.7208 16.3673 12.0186 16 12.0186C15.6327 12.0186 15.335 11.7208 15.335 11.3535Z"></path></svg></div><span class="[display:var(--force-hide-label)] ps-1 pe-1 text-[13px] font-semibold whitespace-nowrap">Voice</span></button>
+
+or
+
+<button id="composer-submit-button" aria-label="Send prompt" data-testid="send-button" class="composer-submit-btn composer-submit-button-color h-9 w-9"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="icon"><path d="M8.99992 16V6.41407L5.70696 9.70704C5.31643 10.0976 4.68342 10.0976 4.29289 9.70704C3.90237 9.31652 3.90237 8.6835 4.29289 8.29298L9.29289 3.29298L9.36907 3.22462C9.76184 2.90427 10.3408 2.92686 10.707 3.29298L15.707 8.29298L15.7753 8.36915C16.0957 8.76192 16.0731 9.34092 15.707 9.70704C15.3408 10.0732 14.7618 10.0958 14.3691 9.7754L14.2929 9.70704L10.9999 6.41407V16C10.9999 16.5523 10.5522 17 9.99992 17C9.44764 17 8.99992 16.5523 8.99992 16Z"></path></svg></button>
+
+and when processing
+
+
+<button id="composer-submit-button" aria-label="Stop streaming" data-testid="stop-button" class="composer-submit-btn composer-secondary-button-color h-9 w-9"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="icon"><path d="M4.5 5.75C4.5 5.05964 5.05964 4.5 5.75 4.5H14.25C14.9404 4.5 15.5 5.05964 15.5 5.75V14.25C15.5 14.9404 14.9404 15.5 14.25 15.5H5.75C5.05964 15.5 4.5 14.9404 4.5 14.25V5.75Z"></path></svg></button>
+
+===
+
+grok
+
+https://grok.com/chat/*
+
+the button state are
+
+<button class="group flex flex-col justify-center rounded-full focus:outline-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" aria-label="Enter voice mode" tabindex="0" style="opacity: 1; transform: none;"><div class="h-10 relative aspect-square flex items-center justify-center gap-0.5 rounded-full ring-1 ring-inset duration-100 before:absolute before:inset-0 before:rounded-full before:bg-button-filled before:ring-0 before:transition-all bg-button-filled text-fg-invert ring-transparent before:[clip-path:circle(50%_at_50%_50%)]"><div class="w-0.5 relative z-10 rounded-full bg-fg-invert" style="height: 0.4rem;"></div><div class="w-0.5 relative z-10 rounded-full bg-fg-invert" style="height: 0.8rem;"></div><div class="w-0.5 relative z-10 rounded-full bg-fg-invert" style="height: 1.2rem;"></div><div class="w-0.5 relative z-10 rounded-full bg-fg-invert" style="height: 0.7rem;"></div><div class="w-0.5 relative z-10 rounded-full bg-fg-invert" style="height: 1rem;"></div><div class="w-0.5 relative z-10 rounded-full bg-fg-invert" style="height: 0.4rem;"></div></div></button>
+
+and when processing
+
+<button class="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium leading-[normal] cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-60 disabled:cursor-not-allowed transition-colors duration-100 [&amp;_svg]:shrink-0 select-none border border-border-l2 text-fg-primary hover:bg-button-ghost-hover [&amp;_svg]:hover:text-fg-primary disabled:hover:bg-transparent h-10 w-10 rounded-full group/attach-button" type="button" aria-label="Attach" tabindex="0" id="radix-«rbm»" aria-haspopup="menu" aria-expanded="false" data-state="closed"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="stroke-[2] text-primary transition-colors duration-100"><path d="M10 9V15C10 16.1046 10.8954 17 12 17V17C13.1046 17 14 16.1046 14 15V7C14 4.79086 12.2091 3 10 3V3C7.79086 3 6 4.79086 6 7V15C6 18.3137 8.68629 21 12 21V21C15.3137 21 18 18.3137 18 15V8" stroke="currentColor"></path></svg></button>
+
+
+===
+
+
+https://gemini.google.com/app/*
+
+the button state are
+
+<button _ngcontent-ng-c1936302509="" data-node-type="speech_dictation_mic_button" maticonsuffix="" mat-icon-button="" mattooltip="Use microphone" aria-label="Microphone" class="mdc-icon-button mat-mdc-icon-button mat-mdc-button-base mat-mdc-tooltip-trigger speech_dictation_mic_button ng-tns-c1936302509-6 mat-unthemed" mat-ripple-loader-uninitialized="" mat-ripple-loader-class-name="mat-mdc-button-ripple" mat-ripple-loader-centered="" jslog="175863;track:generic_click,impression" aria-describedby="cdk-describedby-message-ng-1-3" cdk-describedby-host="ng-1"><span class="mat-mdc-button-persistent-ripple mdc-icon-button__ripple"></span><div _ngcontent-ng-c1936302509=""><mat-icon _ngcontent-ng-c1936302509="" role="img" class="mat-icon notranslate ng-tns-c1936302509-6 icon-filled gds-icon-l google-symbols mat-ligature-font mat-icon-no-color" aria-hidden="true" data-mat-icon-type="font" data-mat-icon-name="mic" fonticon="mic"></mat-icon><!----><!----></div><span class="mat-focus-indicator"></span><span class="mat-mdc-button-touch-target"></span></button>
+
+and when processing
+
+<button _ngcontent-ng-c155211854="" mat-icon-button="" class="mdc-icon-button mat-mdc-icon-button mat-mdc-button-base send-button ng-tns-c155211854-4 mat-unthemed stop" mat-ripple-loader-class-name="mat-mdc-button-ripple" mat-ripple-loader-centered="" aria-label="Stop response" jslog="188689;track:generic_click,impression;BardVeMetadataKey:[[&quot;r_7fd10cc74f3e6cd6&quot;,&quot;c_057e64fc2c127c78&quot;,null,null,null,null,null,null,1,null,null,null,0]];mutable:true" aria-disabled="false" tabindex="0"><span class="mat-mdc-button-persistent-ripple mdc-icon-button__ripple"></span><mat-icon _ngcontent-ng-c155211854="" role="img" fonticon="send" class="mat-icon notranslate send-button-icon icon-filled gds-icon-xl google-symbols mat-ligature-font mat-icon-no-color hidden" aria-hidden="true" data-mat-icon-type="font" data-mat-icon-name="send"></mat-icon><div _ngcontent-ng-c155211854="" class="blue-circle stop-icon ng-tns-c155211854-4 ng-star-inserted" style=""><mat-icon _ngcontent-ng-c155211854="" role="img" fonticon="stop" class="mat-icon notranslate icon-filled ng-tns-c155211854-4 gds-icon-xl google-symbols mat-ligature-font mat-icon-no-color" aria-hidden="true" data-mat-icon-type="font" data-mat-icon-name="stop"></mat-icon></div><!----><!----><span class="mat-focus-indicator"></span><span class="mat-mdc-button-touch-target"></span><span class="mat-ripple mat-mdc-button-ripple"></span></button>
+
+=== DONE
+
+for openrouter
+
+https://openrouter.ai/chat?room=*
+
+the button state are
+
+<button class="inline-flex items-center justify-center whitespace-nowrap rounded-md font-medium focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 focus-visible:ring-1 focus-visible:ring-ring gap-2 leading-6 bg-primary text-primary-foreground shadow hover:bg-primary/90 h-9 w-9 transition-all opacity-40" data-state="closed" disabled=""><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon" class="size-4"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18"></path></svg></button>
+
+and when processing
+
+<button class="inline-flex items-center justify-center whitespace-nowrap rounded-md font-medium focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 focus-visible:ring-1 focus-visible:ring-ring gap-2 leading-6 text-primary-foreground shadow h-9 w-9 transition-all bg-red-9 hover:bg-red-10" data-state="closed"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" data-slot="icon" class="size-4"><path fill-rule="evenodd" d="M4.5 7.5a3 3 0 0 1 3-3h9a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-9Z" clip-rule="evenodd"></path></svg></button>
+
+the distinguisable is
+
+<path d="M4.5 10.5 12 3m0 0 7.5
+7.5M12 3v18"></path>
+
+and
+
+<path d="M4.5 7.5a3 3 0
+0 1 3-3h9a3 3 0 0 1
+3 3v9a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-9Z"></path>
+
+=== DONE
+
+for qwen
+
+https://chat.qwen.ai/c/*
+
+the button state are
+
+<button id="send-message-button" class="_sendMessageButton_71e98_48 disabled bg-[#C8CAD9] text-white dark:bg-gray-217 dark:text-white svelte-17xwb8y" type="submit" disabled=""><i class="iconfont leading-none icon-line-arrow-up !text-20" style=""></i></button>
+
+
+and when processing
+
+<button class="flex size-8 items-center overflow-hidden rounded-full transition justify-end text-purple-500 hover:text-purple-400"><i class="iconfont leading-none icon-StopIcon !text-30" style=""></i></button>
+
+the distinguisable are icon-line-arrow-up and icon-StopIcon
+
+
+=== DONE
 
 for kimi
 
@@ -24,11 +115,11 @@ and when processing
 
 the distinguisable is name="Send" and name="stop"
 
-===
+=== DONE
 
 we need configurable constant from yaml file of list web and target element selector because the page is not only ai studio but also https://www.kimi.com/chat/* https://chat.qwen.ai/c/*
 
-===
+=== DONE
 
 the element target should be in constants.ts
 

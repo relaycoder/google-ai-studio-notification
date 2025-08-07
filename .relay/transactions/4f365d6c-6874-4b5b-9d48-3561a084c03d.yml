@@ -1,0 +1,144 @@
+uuid: 4f365d6c-6874-4b5b-9d48-3561a084c03d
+projectId: google-ai-studio-notification
+createdAt: '2025-08-07T02:53:51.228Z'
+linesAdded: 8
+linesRemoved: 1
+gitCommitMsg: 'feat: add support for OpenRouter'
+promptSummary: >-
+  Add support for openrouter.ai, including updating site definitions and
+  manifest permissions.
+reasoning:
+  - >-
+    I've analyzed the request to add support for OpenRouter. Here are the steps
+    I'll take:
+  - >-
+    1.  **Update `src/content/sites.ts`**: I will add a new site configuration
+    for "OpenRouter".
+  - >-
+    *   The `matches` array will contain `https://openrouter.ai/chat*`. This
+    pattern will be converted to a regular expression by the application logic
+    to correctly match URLs like `https://openrouter.ai/chat?room=some-id`.
+  - >-
+    *   The `selector` will target the SVG `path` element of the "stop" button
+    using its unique `d` attribute, as you've pointed out is the distinguishing
+    feature. This is a robust way to detect when a process is running.
+  - >-
+    2.  **Update `public/manifest.json`**: I will add a new match pattern to the
+    `content_scripts` section to ensure the extension's content script is
+    injected into OpenRouter pages.
+  - >-
+    *   The pattern will be `https://openrouter.ai/*`. This is a valid Chrome
+    extension match pattern that will cover the chat pages. The more specific
+    URL check in `App.tsx` will handle the activation of the indicator on the
+    correct pages.
+  - These changes will enable the extension to monitor processes on OpenRouter.
+operations:
+  - type: write
+    path: src/content/sites.ts
+    content: >-
+      --- src/content/sites.ts
+
+      +++ src/content/sites.ts
+
+      @@ -21,4 +21,10 @@
+           matches: ['https://chat.qwen.ai/c/*'],
+           selector: 'button i.icon-StopIcon',
+         },
+      +  {
+
+      +    name: 'OpenRouter',
+
+      +    matches: ['https://openrouter.ai/chat*'],
+
+      +    selector:
+
+      +      'path[d="M4.5 7.5a3 3 0 0 1 3-3h9a3 3 0 0 1 3 3v9a3 3 0 0 1-3
+      3h-9a3 3 0 0 1-3-3v-9Z"]',
+
+      +  },
+       ];
+    patchStrategy: new-unified
+  - type: write
+    path: public/manifest.json
+    content: |-
+      --- public/manifest.json
+      +++ public/manifest.json
+      @@ -15,7 +15,8 @@
+               "https://www.kimi.com/chat/*",
+               "https://kimi.com/chat/*",
+               "https://kimi.moonshot.cn/chat/*",
+      -        "https://chat.qwen.ai/c/*"
+      +        "https://chat.qwen.ai/c/*",
+      +        "https://openrouter.ai/*"
+             ],
+             "js": ["content.js"],
+             "css": ["content.css"]
+    patchStrategy: new-unified
+snapshot:
+  src/content/sites.ts: |-
+    export interface Site {
+      name: string;
+      matches: string[];
+      selector: string;
+    }
+
+    export const sites: Site[] = [
+      {
+        name: 'Google AI Studio',
+        matches: ['https://aistudio.google.com/*'],
+        selector: "rect[class*='stoppable-stop']",
+      },
+      {
+        name: 'Kimi Chat',
+        matches: [
+          'https://www.kimi.com/chat/*',
+          'https://kimi.com/chat/*',
+          'https://kimi.moonshot.cn/chat/*',
+        ],
+        selector: "svg[name='stop']",
+      },
+      {
+        name: 'Qwen Chat',
+        matches: ['https://chat.qwen.ai/c/*'],
+        selector: 'button i.icon-StopIcon',
+      },
+    ];
+  public/manifest.json: |-
+    {
+      "manifest_version": 3,
+      "name": "AI Studio Notifier",
+      "version": "1.3.0",
+      "description": "Plays a sound and shows a notification when a process in Google AI Studio finishes.",
+      "permissions": ["notifications", "alarms", "storage"],
+      "background": {
+        "service_worker": "background.js"
+      },
+      "content_scripts": [
+        {
+          "matches": [
+            "https://aistudio.google.com/*",
+            "https://www.kimi.com/chat/*",
+            "https://kimi.com/chat/*",
+            "https://kimi.moonshot.cn/chat/*",
+            "https://chat.qwen.ai/c/*"
+          ],
+          "js": ["content.js"],
+          "css": ["content.css"]
+        }
+      ],
+      "web_accessible_resources": [
+        {
+          "resources": ["notification.mp3", "icon128.png", "icon48.png"],
+          "matches": ["<all_urls>"]
+        }
+      ],
+      "icons": {
+        "48": "icon48.png",
+        "128": "icon128.png"
+      },
+      "action": {
+        "default_title": "AI Studio Notifier",
+        "default_icon": "icon128.png"
+      }
+    }
+approved: true

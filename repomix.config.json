@@ -25,6 +25,7 @@
   "include": [
     // "README.md",
     "package.json",
+    "public/manifest.json",
     "tsconfig.json",
     "src",
     ".eslintrc.cjs",

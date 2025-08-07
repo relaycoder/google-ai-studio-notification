@@ -1,0 +1,91 @@
+uuid: 137d5490-ddc2-4eb3-8386-35b86b3e70d4
+projectId: google-ai-studio-notification
+createdAt: '2025-08-07T02:01:36.829Z'
+linesAdded: 1
+linesRemoved: 1
+gitCommitMsg: 'fix(qwen): Update selector for stop button detection'
+promptSummary: >-
+  User wants to update the selectors for Qwen chat to correctly identify the
+  processing state.
+reasoning:
+  - >-
+    Okay, I see you're looking to update the selector for Qwen Chat to more
+    accurately detect when a process is running. Based on the HTML snippets
+    you've provided, the presence of an `<i>` element with the class
+    `icon-StopIcon` inside a button is the key indicator.
+  - >-
+    I'll update the configuration in `src/content/sites.ts` to use this new,
+    more accurate selector.
+  - '### Step-by-step reasoning'
+  - >-
+    1.  **Analyze Request**: The goal is to fix process detection for Qwen Chat.
+    The user has identified that the stop button contains `<i class="...
+    icon-StopIcon ...">`.
+  - >-
+    2.  **Locate Target File**: The selectors for different websites are defined
+    in `src/content/sites.ts`.
+  - >-
+    3.  **Identify Change**: The existing selector for Qwen Chat is `button >
+    span[aria-label='stop']`. This needs to be replaced with a selector that
+    matches the structure provided.
+  - >-
+    4.  **Formulate New Selector**: A robust selector for the stop button is
+    `button i.icon-StopIcon`. This looks for a button containing an `<i>` tag
+    that has the `icon-StopIcon` class.
+  - >-
+    5.  **Apply Change**: I will replace the old selector with the new one in
+    the `sites` array for the 'Qwen Chat' entry. No other files need to be
+    changed as the core logic in `App.tsx` correctly uses this selector to
+    determine if a run has started or stopped.
+  - 'Here is the required patch:'
+  - >-
+    This change will ensure the extension correctly detects when Qwen Chat is
+    processing a request.
+operations:
+  - type: write
+    path: src/content/sites.ts
+    content: |-
+      <<<<<<< SEARCH
+        {
+          name: 'Qwen Chat',
+          matches: ['https://chat.qwen.ai/c/*'],
+          selector: "button > span[aria-label='stop']",
+        },
+      =======
+        {
+          name: 'Qwen Chat',
+          matches: ['https://chat.qwen.ai/c/*'],
+          selector: 'button i.icon-StopIcon',
+        },
+      >>>>>>> REPLACE
+    patchStrategy: multi-search-replace
+snapshot:
+  src/content/sites.ts: |-
+    export interface Site {
+      name: string;
+      matches: string[];
+      selector: string;
+    }
+
+    export const sites: Site[] = [
+      {
+        name: 'Google AI Studio',
+        matches: ['https://aistudio.google.com/*'],
+        selector: "rect[class*='stoppable-stop']",
+      },
+      {
+        name: 'Kimi Chat',
+        matches: [
+          'https://www.kimi.com/chat/*',
+          'https://kimi.com/chat/*',
+          'https://kimi.moonshot.cn/chat/*',
+        ],
+        selector: "svg[name='stop']",
+      },
+      {
+        name: 'Qwen Chat',
+        matches: ['https://chat.qwen.ai/c/*'],
+        selector: "button > span[aria-label='stop']",
+      },
+    ];
+approved: true

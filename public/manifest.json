@@ -9,7 +9,14 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://aistudio.google.com/*"],
+      "matches": [
+        "https://aistudio.google.com/*",
+        "https://www.kimi.com/chat/*",
+        "https://kimi.com/chat/*",
+        "https://kimi.moonshot.cn/chat/*",
+        "https://chat.qwen.ai/c/*",
+        "https://openrouter.ai/*"
+      ],
       "js": ["content.js"],
       "css": ["content.css"]
     }

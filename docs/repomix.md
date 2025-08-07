@@ -1,5 +1,7 @@
 # Directory Structure
 ```
+public/
+  manifest.json
 src/
   content/
     App.tsx
@@ -22,33 +24,6 @@ vite.config.ts
 
 # Files
 
-## File: src/content/sites.ts
-```typescript
-export interface Site {
-  name: string;
-  matches: string[];
-  selector: string;
-}
-
-export const sites: Site[] = [
-  {
-    name: 'Google AI Studio',
-    matches: ['https://aistudio.google.com/*'],
-    selector: "rect[class*='stoppable-stop']",
-  },
-  {
-    name: 'Kimi Chat',
-    matches: ['https://www.kimi.com/chat/*', 'https://kimi.com/chat/*'],
-    selector: "svg[name='stop']",
-  },
-  {
-    name: 'Qwen Chat',
-    matches: ['https://chat.qwen.ai/c/*'],
-    selector: "button > span[aria-label='stop']",
-  },
-];
-```
-
 ## File: src/content/index.tsx
 ```typescript
 import React from 'react';
@@ -68,6 +43,37 @@ root.render(
     <App />
   </React.StrictMode>
 );
+```
+
+## File: src/content/sites.ts
+```typescript
+export interface Site {
+  name: string;
+  matches: string[];
+  selector: string;
+}
+
+export const sites: Site[] = [
+  {
+    name: 'Google AI Studio',
+    matches: ['https://aistudio.google.com/*'],
+    selector: "rect[class*='stoppable-stop']",
+  },
+  {
+    name: 'Kimi Chat',
+    matches: [
+      'https://www.kimi.com/chat/*',
+      'https://kimi.com/chat/*',
+      'https://kimi.moonshot.cn/chat/*',
+    ],
+    selector: "svg[name='stop']",
+  },
+  {
+    name: 'Qwen Chat',
+    matches: ['https://chat.qwen.ai/c/*'],
+    selector: 'button i.icon-StopIcon',
+  },
+];
 ```
 
 ## File: src/content/style.css
@@ -384,6 +390,47 @@ export default defineConfig({
     },
   },
 });
+```
+
+## File: public/manifest.json
+```json
+{
+  "manifest_version": 3,
+  "name": "AI Studio Notifier",
+  "version": "1.3.0",
+  "description": "Plays a sound and shows a notification when a process in Google AI Studio finishes.",
+  "permissions": ["notifications", "alarms", "storage"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://aistudio.google.com/*",
+        "https://www.kimi.com/chat/*",
+        "https://kimi.com/chat/*",
+        "https://kimi.moonshot.cn/chat/*",
+        "https://chat.qwen.ai/c/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["notification.mp3", "icon128.png", "icon48.png"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "action": {
+    "default_title": "AI Studio Notifier",
+    "default_icon": "icon128.png"
+  }
+}
 ```
 
 ## File: .eslintrc.cjs
@@ -1678,7 +1725,7 @@ function App() {
 
     // A MutationObserver is a good way to detect SPA navigations.
     const observer = new MutationObserver(checkSite);
-    observer.observe(document.body, {
+    observer.observe(document.documentElement, {
       childList: true,
       subtree: true,
     });
